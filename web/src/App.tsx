@@ -3,6 +3,7 @@ import './App.css'
 import {
   cancelUpload,
   finalizeUpload,
+  getUploadStatus,
   initiateUpload,
   uploadChunk,
   type UploadSession,
@@ -10,6 +11,7 @@ import {
 
 const CHUNK_SIZE = 1024 * 1024
 const MAX_PARALLEL_CHUNKS = 3
+const MAX_CHUNK_RETRIES = 3
 
 type UploadStatus = 'queued' | 'uploading' | 'completed' | 'cancelled' | 'failed'
 
@@ -46,7 +48,15 @@ function App() {
     updateUpload(item.id, { status: 'uploading', error: undefined })
 
     try {
-      const session = await initiateUpload(item.file, CHUNK_SIZE)
+      const existingSession = item.session
+      const shouldResume =
+        existingSession?.status !== undefined &&
+        existingSession.status !== 'failed' &&
+        existingSession.status !== 'cancelled'
+      const session = shouldResume
+        ? await getUploadStatus(existingSession.uploadId)
+        : await initiateUpload(item.file, CHUNK_SIZE)
+
       updateFromSession(item.id, session)
 
       await uploadChunks(item, session)
@@ -66,11 +76,15 @@ function App() {
   }
 
   async function uploadChunks(item: UploadItem, session: UploadSession) {
-    const chunkIndexes = Array.from({ length: session.totalChunks }, (_, index) => index)
+    const uploadedChunks = new Set(session.uploadedChunks)
+    const chunkIndexes = Array.from({ length: session.totalChunks }, (_, index) => index).filter(
+      (index) => !uploadedChunks.has(index),
+    )
     let nextIndex = 0
+    let firstError: Error | undefined
 
     async function worker() {
-      while (nextIndex < chunkIndexes.length) {
+      while (nextIndex < chunkIndexes.length && !firstError) {
         if (cancelledUploads.current.has(item.id)) {
           return
         }
@@ -81,15 +95,53 @@ function App() {
         const start = chunkIndex * session.chunkSize
         const end = Math.min(start + session.chunkSize, item.file.size)
         const chunk = item.file.slice(start, end)
-        const updatedSession = await uploadChunk(session.uploadId, chunkIndex, chunk)
 
-        updateFromSession(item.id, updatedSession)
+        try {
+          const updatedSession = await uploadChunkWithRetry(item.id, session, chunkIndex, chunk)
+          updateFromSession(item.id, updatedSession, { error: undefined })
+        } catch (error) {
+          firstError = error instanceof Error ? error : new Error('Chunk upload failed')
+        }
       }
     }
 
-    await Promise.all(
+    await Promise.allSettled(
       Array.from({ length: Math.min(MAX_PARALLEL_CHUNKS, session.totalChunks) }, () => worker()),
     )
+
+    if (firstError) {
+      throw firstError
+    }
+  }
+
+  async function uploadChunkWithRetry(
+    itemId: string,
+    session: UploadSession,
+    chunkIndex: number,
+    chunk: Blob,
+  ) {
+    for (let attempt = 1; attempt <= MAX_CHUNK_RETRIES + 1; attempt += 1) {
+      try {
+        return await uploadChunk(session.uploadId, chunkIndex, chunk)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Chunk could not be uploaded.'
+
+        if (attempt > MAX_CHUNK_RETRIES) {
+          throw new Error(
+            `Chunk ${chunkIndex + 1}/${session.totalChunks} failed after ${MAX_CHUNK_RETRIES} retries: ${message}`,
+            { cause: error },
+          )
+        }
+
+        updateUpload(itemId, {
+          error: `Chunk ${chunkIndex + 1}/${session.totalChunks} failed: ${message}. Retrying ${attempt}/${MAX_CHUNK_RETRIES}.`,
+        })
+
+        await sleep(500 * 2 ** (attempt - 1))
+      }
+    }
+
+    throw new Error(`Chunk ${chunkIndex + 1}/${session.totalChunks} could not be uploaded.`)
   }
 
   async function cancelItem(item: UploadItem) {
@@ -223,6 +275,10 @@ function formatBytes(bytes: number) {
   const value = bytes / 1024 ** unitIndex
 
   return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
+}
+
+function sleep(milliseconds: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds))
 }
 
 export default App

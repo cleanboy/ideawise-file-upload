@@ -58,4 +58,16 @@ class UploadStorageTest extends TestCase
         self::assertSame('abcdefghi', file_get_contents($finalPath));
         self::assertStringEndsWith('demo-video.mp4', $finalPath);
     }
+
+    public function testListsStoredChunkIndexes(): void
+    {
+        $storage = new UploadStorage($this->storagePath);
+        $uploadId = '90a84699-fd70-4f1b-8354-90eaa6e89c22';
+
+        $storage->writeChunk($uploadId, 9, 'j');
+        $storage->writeChunk($uploadId, 2, 'c');
+        $storage->writeChunk($uploadId, 0, 'a');
+
+        self::assertSame([0, 2, 9], $storage->getStoredChunkIndexes($uploadId));
+    }
 }

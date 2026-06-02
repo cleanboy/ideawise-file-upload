@@ -71,6 +71,12 @@ export async function cancelUpload(uploadId: string): Promise<UploadSession> {
   })
 }
 
+export async function getUploadStatus(uploadId: string): Promise<UploadSession> {
+  return requestJson<UploadSession>(`/api/upload/status/${uploadId}`, {
+    method: 'GET',
+  })
+}
+
 async function requestJson<T>(path: string, init: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, init)
 

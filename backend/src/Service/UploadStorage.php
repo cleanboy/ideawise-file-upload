@@ -75,6 +75,38 @@ readonly class UploadStorage
         $this->removeDirectory($this->uploadStoragePath.'/chunks/'.$uploadId);
     }
 
+    /**
+     * @return int[]
+     */
+    public function getStoredChunkIndexes(string $uploadId): array
+    {
+        $directory = $this->uploadStoragePath.'/chunks/'.$uploadId;
+
+        if (!is_dir($directory)) {
+            return [];
+        }
+
+        $items = scandir($directory);
+
+        if ($items === false) {
+            return [];
+        }
+
+        $chunkIndexes = [];
+
+        foreach ($items as $item) {
+            if (preg_match('/^(\d+)\.part$/', $item, $matches) !== 1) {
+                continue;
+            }
+
+            $chunkIndexes[] = (int) $matches[1];
+        }
+
+        sort($chunkIndexes, SORT_NUMERIC);
+
+        return $chunkIndexes;
+    }
+
     private function getChunkPath(string $uploadId, int $chunkIndex): string
     {
         return $this->uploadStoragePath.'/chunks/'.$uploadId.'/'.$chunkIndex.'.part';

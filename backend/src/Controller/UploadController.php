@@ -85,12 +85,10 @@ class UploadController extends AbstractController
         try {
             $this->storage->storeUploadedChunk($session, $chunkIndex, $chunk);
             $session->markChunkUploaded($chunkIndex);
+            $this->syncStoredChunks($session);
             $this->entityManager->flush();
         } catch (Throwable) {
-            $session->fail();
-            $this->entityManager->flush();
-
-            return $this->error('storage_error', 'Chunk could not be stored.', 500);
+            return $this->error('storage_error', sprintf('Chunk %d could not be stored.', $chunkIndex), 500);
         }
 
         return $this->json($this->serializeSession($session));
@@ -114,6 +112,9 @@ class UploadController extends AbstractController
         if ($session->getStatus() === UploadSession::STATUS_COMPLETED) {
             return $this->json($this->serializeSession($session));
         }
+
+        $this->syncStoredChunks($session);
+        $this->entityManager->flush();
 
         if (!$session->hasAllChunks()) {
             return $this->error('incomplete_upload', 'All chunks must be uploaded before finalizing.', 409);
@@ -141,6 +142,11 @@ class UploadController extends AbstractController
 
         if (!$session instanceof UploadSession) {
             return $this->error('not_found', 'Upload session was not found.', 404);
+        }
+
+        if ($session->canAcceptChunks()) {
+            $this->syncStoredChunks($session);
+            $this->entityManager->flush();
         }
 
         return $this->json($this->serializeSession($session));
@@ -217,6 +223,15 @@ class UploadController extends AbstractController
                 'message' => $message,
             ],
         ], $status);
+    }
+
+    private function syncStoredChunks(UploadSession $session): void
+    {
+        $storedChunks = $this->storage->getStoredChunkIndexes($session->getId());
+
+        if ($storedChunks !== $session->getUploadedChunks()) {
+            $session->replaceUploadedChunks($storedChunks);
+        }
     }
 
     private function createUploadId(): string

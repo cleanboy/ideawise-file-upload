@@ -11,11 +11,11 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Table(name: 'upload_sessions')]
 class UploadSession
 {
-    public const string STATUS_INITIATED = 'initiated';
-    public const string STATUS_UPLOADING = 'uploading';
-    public const string STATUS_COMPLETED = 'completed';
-    public const string STATUS_CANCELLED = 'cancelled';
-    public const string STATUS_FAILED = 'failed';
+    public const STATUS_INITIATED = 'initiated';
+    public const STATUS_UPLOADING = 'uploading';
+    public const STATUS_COMPLETED = 'completed';
+    public const STATUS_CANCELLED = 'cancelled';
+    public const STATUS_FAILED = 'failed';
 
     #[ORM\Id]
     #[ORM\Column(type: Types::GUID)]
@@ -157,6 +157,23 @@ class UploadSession
         }
 
         if ($this->status === self::STATUS_INITIATED) {
+            $this->status = self::STATUS_UPLOADING;
+        }
+
+        $this->touch();
+    }
+
+    /**
+     * @param int[] $chunkIndexes
+     */
+    public function replaceUploadedChunks(array $chunkIndexes): void
+    {
+        $chunkIndexes = array_values(array_unique(array_map('intval', $chunkIndexes)));
+        sort($chunkIndexes, SORT_NUMERIC);
+
+        $this->uploadedChunks = $chunkIndexes;
+
+        if ($this->uploadedChunks !== [] && $this->status === self::STATUS_INITIATED) {
             $this->status = self::STATUS_UPLOADING;
         }
 
