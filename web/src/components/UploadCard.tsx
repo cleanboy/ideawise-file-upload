@@ -7,13 +7,15 @@ import { StatusBadge } from './StatusBadge'
 
 type UploadCardProps = {
   item: UploadItem
+  selected: boolean
   onCancel: (item: UploadItem) => void
   onPause: (item: UploadItem) => void
   onRemove: (item: UploadItem) => void
   onStart: (item: UploadItem) => void
+  onToggleSelect: (id: string) => void
 }
 
-export function UploadCard({ item, onCancel, onPause, onRemove, onStart }: UploadCardProps) {
+export function UploadCard({ item, selected, onCancel, onPause, onRemove, onStart, onToggleSelect }: UploadCardProps) {
   const isRejected = item.status === 'rejected'
   const isPreviewable =
     item.file.type.startsWith('image/') || item.file.type.startsWith('video/')
@@ -24,6 +26,14 @@ export function UploadCard({ item, onCancel, onPause, onRemove, onStart }: Uploa
   return (
     <article className={`upload-card${isRejected ? ' upload-card--rejected' : ''}`}>
       <div className="upload-card__header">
+        <input
+          type="checkbox"
+          className="upload-card__select"
+          checked={selected}
+          onChange={() => onToggleSelect(item.id)}
+          aria-label={`Select ${item.file.name}`}
+        />
+
         {isPreviewable && (
           <div className="upload-card__thumb">
             {preview && item.file.type.startsWith('image/') && (
