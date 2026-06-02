@@ -91,7 +91,51 @@ h1 {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: 14px;
+}
+
+.upload-card__thumb {
+  flex: 0 0 96px;
+  height: 96px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #f3f4f6;
+}
+
+.upload-card__thumb img,
+.upload-card__thumb video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.upload-card__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.upload-card__meta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 8px 0 0;
+}
+
+.upload-card__meta dt {
+  color: #9ca3af;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  line-height: 1.6;
+}
+
+.upload-card__meta dd {
+  margin: 0;
+  color: #374151;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .upload-card h2 {

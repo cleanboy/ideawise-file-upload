@@ -1,5 +1,7 @@
 import type { UploadItem } from '../types/uploads'
+import { usePreview } from '../hooks/usePreview'
 import { formatBytes } from '../utils/formatBytes'
+import { formatDuration } from '../utils/formatDuration'
 import { ProgressBar } from './ProgressBar'
 import { StatusBadge } from './StatusBadge'
 
@@ -12,17 +14,41 @@ type UploadCardProps = {
 
 export function UploadCard({ item, onCancel, onRemove, onStart }: UploadCardProps) {
   const isRejected = item.status === 'rejected'
+  const isPreviewable =
+    item.file.type.startsWith('image/') || item.file.type.startsWith('video/')
+  const preview = usePreview(item.file)
+
+  const ext = item.file.name.split('.').pop()?.toUpperCase()
 
   return (
     <article className={`upload-card${isRejected ? ' upload-card--rejected' : ''}`}>
       <div className="upload-card__header">
-        <div>
+        {isPreviewable && (
+          <div className="upload-card__thumb">
+            {preview && item.file.type.startsWith('image/') && (
+              <img src={preview.url} alt="" />
+            )}
+            {preview && item.file.type.startsWith('video/') && (
+              <video src={preview.url} muted playsInline />
+            )}
+          </div>
+        )}
+
+        <div className="upload-card__info">
           <h2>{item.file.name}</h2>
-          <p>
-            {formatBytes(item.file.size)}
-            {!isRejected && ` · ${item.uploadedChunks}/${item.totalChunks} chunks`}
-          </p>
+          <dl className="upload-card__meta">
+            {ext && <><dt>Type</dt><dd>{ext}</dd></>}
+            {preview?.width && preview?.height && (
+              <><dt>Resolution</dt><dd>{preview.width} × {preview.height}</dd></>
+            )}
+            {preview?.duration !== undefined && (
+              <><dt>Duration</dt><dd>{formatDuration(preview.duration)}</dd></>
+            )}
+            <dt>Size</dt><dd>{formatBytes(item.file.size)}</dd>
+            {!isRejected && <><dt>Chunks</dt><dd>{item.uploadedChunks} / {item.totalChunks}</dd></>}
+          </dl>
         </div>
+
         <StatusBadge status={item.status} />
       </div>
 
@@ -36,7 +62,11 @@ export function UploadCard({ item, onCancel, onRemove, onStart }: UploadCardProp
         <button
           type="button"
           onClick={() => onStart(item)}
-          disabled={item.status === 'uploading' || item.status === 'completed' || item.status === 'rejected'}
+          disabled={
+            item.status === 'uploading' ||
+            item.status === 'completed' ||
+            item.status === 'rejected'
+          }
         >
           {item.status === 'failed' ? 'Retry' : 'Start'}
         </button>
@@ -44,7 +74,11 @@ export function UploadCard({ item, onCancel, onRemove, onStart }: UploadCardProp
           type="button"
           className="button-secondary"
           onClick={() => onCancel(item)}
-          disabled={item.status === 'completed' || item.status === 'cancelled' || item.status === 'rejected'}
+          disabled={
+            item.status === 'completed' ||
+            item.status === 'cancelled' ||
+            item.status === 'rejected'
+          }
         >
           Cancel
         </button>
