@@ -11,11 +11,11 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Table(name: 'upload_sessions')]
 class UploadSession
 {
-    public const STATUS_INITIATED = 'initiated';
-    public const STATUS_UPLOADING = 'uploading';
-    public const STATUS_COMPLETED = 'completed';
-    public const STATUS_CANCELLED = 'cancelled';
-    public const STATUS_FAILED = 'failed';
+    public const string STATUS_INITIATED = 'initiated';
+    public const string STATUS_UPLOADING = 'uploading';
+    public const string STATUS_COMPLETED = 'completed';
+    public const string STATUS_CANCELLED = 'cancelled';
+    public const string STATUS_FAILED = 'failed';
 
     #[ORM\Id]
     #[ORM\Column(type: Types::GUID)]
