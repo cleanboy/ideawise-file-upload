@@ -138,6 +138,16 @@ h1 {
   color: #6b7280;
 }
 
+.status--rejected {
+  background: #ffedd5;
+  color: #c2410c;
+}
+
+.upload-card--rejected {
+  border-color: #fed7aa;
+  border-left: 4px solid #f97316;
+}
+
 .progress-bar {
   height: 10px;
   overflow: hidden;
@@ -154,7 +164,24 @@ h1 {
 }
 
 .error-message {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
   color: #b91c1c;
+  font-size: 14px;
+}
+
+.rejection-reason {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #c2410c;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .actions {

@@ -11,27 +11,32 @@ type UploadCardProps = {
 }
 
 export function UploadCard({ item, onCancel, onRemove, onStart }: UploadCardProps) {
+  const isRejected = item.status === 'rejected'
+
   return (
-    <article className="upload-card">
+    <article className={`upload-card${isRejected ? ' upload-card--rejected' : ''}`}>
       <div className="upload-card__header">
         <div>
           <h2>{item.file.name}</h2>
           <p>
-            {formatBytes(item.file.size)} · {item.uploadedChunks}/{item.totalChunks} chunks
+            {formatBytes(item.file.size)}
+            {!isRejected && ` · ${item.uploadedChunks}/${item.totalChunks} chunks`}
           </p>
         </div>
         <StatusBadge status={item.status} />
       </div>
 
-      <ProgressBar label={`${item.file.name} progress`} value={item.progress} />
+      {!isRejected && <ProgressBar label={`${item.file.name} progress`} value={item.progress} />}
 
-      {item.error ? <p className="error-message">{item.error}</p> : null}
+      {item.error ? (
+        <p className={isRejected ? 'rejection-reason' : 'error-message'}>{item.error}</p>
+      ) : null}
 
       <div className="actions">
         <button
           type="button"
           onClick={() => onStart(item)}
-          disabled={item.status === 'uploading' || item.status === 'completed'}
+          disabled={item.status === 'uploading' || item.status === 'completed' || item.status === 'rejected'}
         >
           {item.status === 'failed' ? 'Retry' : 'Start'}
         </button>
@@ -39,7 +44,7 @@ export function UploadCard({ item, onCancel, onRemove, onStart }: UploadCardProp
           type="button"
           className="button-secondary"
           onClick={() => onCancel(item)}
-          disabled={item.status === 'completed' || item.status === 'cancelled'}
+          disabled={item.status === 'completed' || item.status === 'cancelled' || item.status === 'rejected'}
         >
           Cancel
         </button>

@@ -15,6 +15,7 @@ export function DropZone({ onFilesSelected }: DropZoneProps) {
       <input
         multiple
         type="file"
+        accept="image/*,video/*"
         onChange={(event) => {
           if (event.target.files) {
             onFilesSelected(event.target.files)

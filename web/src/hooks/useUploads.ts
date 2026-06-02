@@ -14,25 +14,57 @@ import { sleep } from '../utils/sleep'
 const CHUNK_SIZE = 1024 * 1024
 const MAX_PARALLEL_CHUNKS = 3
 const MAX_CHUNK_RETRIES = 3
+const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024
+const MAX_FILES_PER_SELECTION = 10
+const ACCEPTED_TYPES = ['image/', 'video/']
 
 export function useUploads() {
   const [uploads, setUploads] = useState<UploadItem[]>([])
   const cancelledUploads = useRef(new Set<string>())
 
   function queueFiles(files: FileList | File[]) {
-    const items = Array.from(files).map((file) => ({
-      id: crypto.randomUUID(),
-      file,
-      status: 'queued' as const,
-      progress: 0,
-      uploadedChunks: 0,
-      totalChunks: Math.ceil(file.size / CHUNK_SIZE),
-    }))
+    let acceptedCount = 0
+
+    const items = Array.from(files).map((file) => {
+      let rejectionReason: string | undefined
+
+      if (!ACCEPTED_TYPES.some((prefix) => file.type.startsWith(prefix))) {
+        rejectionReason = 'Invalid file type. Only images and videos are accepted.'
+      } else if (file.size > MAX_FILE_SIZE) {
+        rejectionReason = 'File exceeds the 2 GB size limit.'
+      } else if (acceptedCount >= MAX_FILES_PER_SELECTION) {
+        rejectionReason = `Selection exceeds the ${MAX_FILES_PER_SELECTION}-file limit per upload.`
+      } else {
+        acceptedCount++
+      }
+
+      if (rejectionReason) {
+        return {
+          id: crypto.randomUUID(),
+          file,
+          status: 'rejected' as const,
+          progress: 0,
+          uploadedChunks: 0,
+          totalChunks: 0,
+          error: rejectionReason,
+        }
+      }
+
+      return {
+        id: crypto.randomUUID(),
+        file,
+        status: 'queued' as const,
+        progress: 0,
+        uploadedChunks: 0,
+        totalChunks: Math.ceil(file.size / CHUNK_SIZE),
+      }
+    })
 
     setUploads((current) => [...items, ...current])
   }
 
   async function startUpload(item: UploadItem) {
+    if (item.status === 'rejected') return
     cancelledUploads.current.delete(item.id)
     updateUpload(item.id, { status: 'uploading', error: undefined })
 

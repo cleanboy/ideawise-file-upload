@@ -1,6 +1,6 @@
 import type { UploadSession } from '../api/uploads'
 
-export type UploadStatus = 'queued' | 'uploading' | 'completed' | 'cancelled' | 'failed'
+export type UploadStatus = 'queued' | 'uploading' | 'completed' | 'cancelled' | 'failed' | 'rejected'
 
 export type UploadItem = {
   id: string
