@@ -134,11 +134,6 @@ class UploadSession
         return round(($this->getUploadedChunkCount() / $this->totalChunks) * 100, 2);
     }
 
-    public function getFinalPath(): ?string
-    {
-        return $this->finalPath;
-    }
-
     public function getCreatedAt(): DateTimeImmutable
     {
         return $this->createdAt;
