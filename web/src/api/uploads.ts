@@ -77,6 +77,12 @@ export async function getUploadStatus(uploadId: string): Promise<UploadSession> 
   })
 }
 
+export async function deleteUpload(uploadId: string): Promise<void> {
+  await requestJson<void>(`/api/upload/${uploadId}`, {
+    method: 'DELETE',
+  })
+}
+
 async function requestJson<T>(path: string, init: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, init)
 
@@ -91,6 +97,10 @@ async function requestJson<T>(path: string, init: RequestInit): Promise<T> {
     }
 
     throw new Error(message)
+  }
+
+  if (response.status === 204) {
+    return undefined as T
   }
 
   return (await response.json()) as T

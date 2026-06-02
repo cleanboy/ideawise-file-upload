@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import './App.css'
 import {
   cancelUpload,
+  deleteUpload,
   finalizeUpload,
   getUploadStatus,
   initiateUpload,
@@ -164,6 +165,23 @@ function App() {
     updateUpload(item.id, { status: 'cancelled' })
   }
 
+  async function removeItem(item: UploadItem) {
+    cancelledUploads.current.add(item.id)
+
+    if (item.session?.uploadId) {
+      try {
+        await deleteUpload(item.session.uploadId)
+      } catch (error) {
+        updateUpload(item.id, {
+          error: error instanceof Error ? error.message : 'Upload could not be removed',
+        })
+        return
+      }
+    }
+
+    setUploads((current) => current.filter((upload) => upload.id !== item.id))
+  }
+
   function updateFromSession(
     id: string,
     session: UploadSession,
@@ -255,6 +273,14 @@ function App() {
                   disabled={item.status === 'completed' || item.status === 'cancelled'}
                 >
                   Cancel
+                </button>
+                <button
+                  type="button"
+                  className="button-secondary"
+                  onClick={() => void removeItem(item)}
+                  disabled={item.status === 'uploading' || item.status === 'completed'}
+                >
+                  Remove
                 </button>
               </div>
             </article>

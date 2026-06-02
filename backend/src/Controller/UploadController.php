@@ -168,6 +168,26 @@ class UploadController extends AbstractController
         return $this->json($this->serializeSession($session));
     }
 
+    #[Route('/{id}', methods: ['DELETE'])]
+    public function delete(string $id): JsonResponse
+    {
+        $session = $this->findSession($id);
+
+        if (!$session instanceof UploadSession) {
+            return $this->error('not_found', 'Upload session was not found.', 404);
+        }
+
+        if ($session->getStatus() === UploadSession::STATUS_COMPLETED) {
+            return $this->error('invalid_state', 'Completed uploads cannot be removed with this cleanup action.', 409);
+        }
+
+        $this->storage->removeUpload($session->getId());
+        $this->entityManager->remove($session);
+        $this->entityManager->flush();
+
+        return $this->json(null, 204);
+    }
+
     /**
      * @return array<string, mixed>
      *
