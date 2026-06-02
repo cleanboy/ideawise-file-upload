@@ -8,11 +8,12 @@ import { StatusBadge } from './StatusBadge'
 type UploadCardProps = {
   item: UploadItem
   onCancel: (item: UploadItem) => void
+  onPause: (item: UploadItem) => void
   onRemove: (item: UploadItem) => void
   onStart: (item: UploadItem) => void
 }
 
-export function UploadCard({ item, onCancel, onRemove, onStart }: UploadCardProps) {
+export function UploadCard({ item, onCancel, onPause, onRemove, onStart }: UploadCardProps) {
   const isRejected = item.status === 'rejected'
   const isPreviewable =
     item.file.type.startsWith('image/') || item.file.type.startsWith('video/')
@@ -52,24 +53,31 @@ export function UploadCard({ item, onCancel, onRemove, onStart }: UploadCardProp
         <StatusBadge status={item.status} />
       </div>
 
-      {!isRejected && <ProgressBar label={`${item.file.name} progress`} value={item.progress} />}
+      {!isRejected && (
+        <ProgressBar
+          label={`${item.file.name} progress`}
+          value={item.pausedProgress ?? item.progress}
+        />
+      )}
 
       {item.error ? (
         <p className={isRejected ? 'rejection-reason' : 'error-message'}>{item.error}</p>
       ) : null}
 
       <div className="actions">
-        <button
-          type="button"
-          onClick={() => onStart(item)}
-          disabled={
-            item.status === 'uploading' ||
-            item.status === 'completed' ||
-            item.status === 'rejected'
-          }
-        >
-          {item.status === 'failed' ? 'Retry' : 'Start'}
-        </button>
+        {item.status === 'uploading' ? (
+          <button type="button" onClick={() => onPause(item)}>
+            Pause
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onStart(item)}
+            disabled={item.status === 'completed' || item.status === 'rejected'}
+          >
+            {item.status === 'failed' ? 'Retry' : item.status === 'paused' ? 'Resume' : 'Start'}
+          </button>
+        )}
         <button
           type="button"
           className="button-secondary"

@@ -172,6 +172,11 @@ h1 {
   color: #15803d;
 }
 
+.status--paused {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
 .status--failed {
   background: #fee2e2;
   color: #b91c1c;

@@ -4,11 +4,12 @@ import { UploadCard } from './UploadCard'
 type UploadListProps = {
   uploads: UploadItem[]
   onCancel: (item: UploadItem) => void
+  onPause: (item: UploadItem) => void
   onRemove: (item: UploadItem) => void
   onStart: (item: UploadItem) => void
 }
 
-export function UploadList({ uploads, onCancel, onRemove, onStart }: UploadListProps) {
+export function UploadList({ uploads, onCancel, onPause, onRemove, onStart }: UploadListProps) {
   return (
     <section className="upload-list" aria-label="Queued uploads">
       {uploads.length === 0 ? (
@@ -19,6 +20,7 @@ export function UploadList({ uploads, onCancel, onRemove, onStart }: UploadListP
             item={item}
             key={item.id}
             onCancel={onCancel}
+            onPause={onPause}
             onRemove={onRemove}
             onStart={onStart}
           />

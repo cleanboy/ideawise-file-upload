@@ -21,6 +21,7 @@ const ACCEPTED_TYPES = ['image/', 'video/']
 export function useUploads() {
   const [uploads, setUploads] = useState<UploadItem[]>([])
   const cancelledUploads = useRef(new Set<string>())
+  const pausedUploads = useRef(new Set<string>())
 
   function queueFiles(files: FileList | File[]) {
     let acceptedCount = 0
@@ -66,7 +67,8 @@ export function useUploads() {
   async function startUpload(item: UploadItem) {
     if (item.status === 'rejected') return
     cancelledUploads.current.delete(item.id)
-    updateUpload(item.id, { status: 'uploading', error: undefined })
+    pausedUploads.current.delete(item.id)
+    updateUpload(item.id, { status: 'uploading', pausedProgress: undefined, error: undefined })
 
     try {
       const existingSession = item.session
@@ -86,9 +88,16 @@ export function useUploads() {
         return
       }
 
+      if (pausedUploads.current.has(item.id)) {
+        return
+      }
+
       const completedSession = await finalizeUpload(session.uploadId)
       updateFromSession(item.id, completedSession, { status: 'completed' })
     } catch (error) {
+      if (pausedUploads.current.has(item.id)) {
+        return
+      }
       updateUpload(item.id, {
         status: cancelledUploads.current.has(item.id) ? 'cancelled' : 'failed',
         error: error instanceof Error ? error.message : 'Upload failed',
@@ -114,6 +123,11 @@ export function useUploads() {
     }
 
     updateUpload(item.id, { status: 'cancelled' })
+  }
+
+  function pauseItem(item: UploadItem) {
+    pausedUploads.current.add(item.id)
+    updateUpload(item.id, { status: 'paused', pausedProgress: item.progress })
   }
 
   async function removeItem(item: UploadItem) {
@@ -143,7 +157,7 @@ export function useUploads() {
 
     async function worker() {
       while (nextIndex < chunkIndexes.length && !firstError) {
-        if (cancelledUploads.current.has(item.id)) {
+        if (cancelledUploads.current.has(item.id) || pausedUploads.current.has(item.id)) {
           return
         }
 
@@ -156,7 +170,8 @@ export function useUploads() {
 
         try {
           const updatedSession = await uploadChunkWithRetry(item.id, session, chunkIndex, chunk)
-          updateFromSession(item.id, updatedSession, { error: undefined })
+          const statusOverride = pausedUploads.current.has(item.id) ? { status: 'paused' as const } : {}
+          updateFromSession(item.id, updatedSession, { error: undefined, ...statusOverride })
         } catch (error) {
           firstError = error instanceof Error ? error : new Error('Chunk upload failed')
         }
@@ -227,6 +242,7 @@ export function useUploads() {
     uploads,
     queueFiles,
     startUpload,
+    pauseItem,
     cancelItem,
     removeItem,
   }

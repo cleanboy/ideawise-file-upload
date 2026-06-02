@@ -4,7 +4,7 @@ import { UploadList } from './components/UploadList'
 import { useUploads } from './hooks/useUploads'
 
 function App() {
-  const { cancelItem, queueFiles, removeItem, startUpload, uploads } = useUploads()
+  const { cancelItem, pauseItem, queueFiles, removeItem, startUpload, uploads } = useUploads()
 
   return (
     <main className="app-shell">
@@ -23,6 +23,7 @@ function App() {
       <UploadList
         uploads={uploads}
         onCancel={(item) => void cancelItem(item)}
+        onPause={(item) => pauseItem(item)}
         onRemove={(item) => void removeItem(item)}
         onStart={(item) => void startUpload(item)}
       />
