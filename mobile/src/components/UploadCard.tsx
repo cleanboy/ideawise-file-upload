@@ -1,4 +1,8 @@
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
+import * as VideoThumbnails from 'expo-video-thumbnails'
+import { useVideoPlayer, VideoView } from 'expo-video'
+import { useEffect, useState } from 'react'
+import { Image, Modal, StyleSheet, Text, TouchableOpacity, View, SafeAreaView } from 'react-native'
 import type { UploadItem } from '../types/uploads'
 import { formatBytes } from '../utils/formatBytes'
 import { ProgressBar } from './ProgressBar'
@@ -14,21 +18,83 @@ type Props = {
 
 const STARTABLE = new Set(['queued', 'paused', 'failed'])
 const CANCELLABLE = new Set(['queued', 'uploading', 'paused'])
+const isVideo = (type: string) => type.startsWith('video/')
 const isImage = (type: string) => type.startsWith('image/')
 
+function VideoPreviewModal({ uri, onClose }: { uri: string; onClose: () => void }) {
+  const player = useVideoPlayer(uri, (p) => {
+    p.loop = false
+    p.play()
+  })
+
+  return (
+    <Modal animationType="fade" presentationStyle="fullScreen" onRequestClose={onClose}>
+      <SafeAreaView style={preview.container}>
+        <VideoView player={player} style={preview.video} allowsFullscreen contentFit="contain" />
+        <TouchableOpacity style={preview.closeBtn} onPress={onClose}>
+          <Text style={preview.closeText}>✕</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    </Modal>
+  )
+}
+
+const preview = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#000' },
+  video: { flex: 1 },
+  closeBtn: {
+    position: 'absolute',
+    top: 56,
+    right: 20,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 20,
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+})
+
 export function UploadCard({ item, onStart, onPause, onCancel, onRemove }: Props) {
+  const [thumbnailUri, setThumbnailUri] = useState<string | null>(null)
+  const [previewOpen, setPreviewOpen] = useState(false)
   const showProgress = item.status === 'uploading' || item.status === 'paused'
+
+  useEffect(() => {
+    if (!isVideo(item.file.type)) return
+    VideoThumbnails.getThumbnailAsync(item.file.uri, { time: 0, quality: 0.6 })
+      .then(({ uri }) => setThumbnailUri(uri))
+      .catch(() => {})
+  }, [item.file.uri, item.file.type])
+
+  function renderThumb() {
+    if (isImage(item.file.type)) {
+      return (
+        <TouchableOpacity onPress={() => setPreviewOpen(true)}>
+          <Image source={{ uri: item.file.uri }} style={styles.thumb} />
+        </TouchableOpacity>
+      )
+    }
+
+    return (
+      <TouchableOpacity style={styles.thumb} onPress={() => setPreviewOpen(true)}>
+        {thumbnailUri ? (
+          <Image source={{ uri: thumbnailUri }} style={StyleSheet.absoluteFill} />
+        ) : (
+          <View style={[StyleSheet.absoluteFill, styles.videoThumb]} />
+        )}
+        <View style={styles.playOverlay}>
+          <Ionicons name="play" size={18} color="#fff" />
+        </View>
+      </TouchableOpacity>
+    )
+  }
 
   return (
     <View style={styles.card}>
       <View style={styles.row}>
-        {isImage(item.file.type) ? (
-          <Image source={{ uri: item.file.uri }} style={styles.thumb} />
-        ) : (
-          <View style={[styles.thumb, styles.videoThumb]}>
-            <Text style={styles.videoIcon}>▶</Text>
-          </View>
-        )}
+        {renderThumb()}
 
         <View style={styles.meta}>
           <Text style={styles.name} numberOfLines={1}>{item.file.name}</Text>
@@ -80,6 +146,28 @@ export function UploadCard({ item, onStart, onPause, onCancel, onRemove }: Props
           </TouchableOpacity>
         )}
       </View>
+
+      {previewOpen && isVideo(item.file.type) && (
+        <VideoPreviewModal uri={item.file.uri} onClose={() => setPreviewOpen(false)} />
+      )}
+
+      {previewOpen && isImage(item.file.type) && (
+        <Modal animationType="fade" presentationStyle="fullScreen" onRequestClose={() => setPreviewOpen(false)}>
+          <SafeAreaView style={{ flex: 1, backgroundColor: '#000' }}>
+            <Image
+              source={{ uri: item.file.uri }}
+              style={{ flex: 1 }}
+              resizeMode="contain"
+            />
+            <TouchableOpacity
+              style={preview.closeBtn}
+              onPress={() => setPreviewOpen(false)}
+            >
+              <Text style={preview.closeText}>✕</Text>
+            </TouchableOpacity>
+          </SafeAreaView>
+        </Modal>
+      )}
     </View>
   )
 }
@@ -105,15 +193,22 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#1e293b',
   },
   videoThumb: {
     backgroundColor: '#1e293b',
+  },
+  playOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: 52,
+    height: 52,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  videoIcon: {
-    color: '#fff',
-    fontSize: 18,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 8,
   },
   meta: {
     flex: 1,
