@@ -13,6 +13,7 @@ import { sleep } from '../utils/sleep'
 
 const CHUNK_SIZE = 1024 * 1024
 const MAX_PARALLEL_CHUNKS = 3
+const MAX_CONCURRENT_UPLOADS = 3
 const MAX_CHUNK_RETRIES = 3
 const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024
 const MAX_FILES_PER_SELECTION = 10
@@ -22,6 +23,27 @@ export function useUploads() {
   const [uploads, setUploads] = useState<UploadItem[]>([])
   const cancelledUploads = useRef(new Set<string>())
   const pausedUploads = useRef(new Set<string>())
+  const activeUploadCount = useRef(0)
+  const uploadWaiters = useRef<Array<() => void>>([])
+
+  function acquireUploadSlot(): Promise<void> {
+    if (activeUploadCount.current < MAX_CONCURRENT_UPLOADS) {
+      activeUploadCount.current++
+      return Promise.resolve()
+    }
+    return new Promise<void>((resolve) => {
+      uploadWaiters.current.push(resolve)
+    })
+  }
+
+  function releaseUploadSlot() {
+    const next = uploadWaiters.current.shift()
+    if (next) {
+      next() // transfer slot directly — count stays the same
+    } else {
+      activeUploadCount.current--
+    }
+  }
 
   function queueFiles(files: FileList | File[]) {
     let acceptedCount = 0
@@ -68,6 +90,14 @@ export function useUploads() {
     if (item.status === 'rejected') return
     cancelledUploads.current.delete(item.id)
     pausedUploads.current.delete(item.id)
+
+    await acquireUploadSlot()
+
+    if (cancelledUploads.current.has(item.id)) {
+      releaseUploadSlot()
+      return
+    }
+
     updateUpload(item.id, { status: 'uploading', pausedProgress: undefined, error: undefined })
 
     try {
@@ -102,6 +132,8 @@ export function useUploads() {
         status: cancelledUploads.current.has(item.id) ? 'cancelled' : 'failed',
         error: error instanceof Error ? error.message : 'Upload failed',
       })
+    } finally {
+      releaseUploadSlot()
     }
   }
 

@@ -360,3 +360,136 @@ describe('retry logic', () => {
     expect(result.current.uploads[0].error).toMatch(/failed after 3 retries/)
   })
 })
+
+// ─── concurrency control ──────────────────────────────────────────────────────
+
+describe('concurrency control', () => {
+  // Helpers -------------------------------------------------------------------
+
+  /** Blocks each initiateUpload call until the returned gate function is called. */
+  function blockingInitiate() {
+    const gates: Array<() => void> = []
+    vi.mocked(api.initiateUpload).mockImplementation(
+      () => new Promise<UploadSession>((resolve) => { gates.push(() => resolve(makeSession())) }),
+    )
+    vi.mocked(api.uploadChunk).mockResolvedValue(
+      makeSession({ uploadedChunkCount: 1, progress: 100, status: 'uploading' }),
+    )
+    vi.mocked(api.finalizeUpload).mockResolvedValue(makeSession({ status: 'completed' }))
+    return gates
+  }
+
+  /**
+   * Start n uploads concurrently inside act(), then yield 30 ms (real time,
+   * not fake timers) so microtasks settle and React flushes state updates —
+   * all within the same act() boundary so React sees no "outside act" warning.
+   */
+  async function startConcurrent(
+    result: ReturnType<typeof renderHook<ReturnType<typeof useUploads>, unknown>>['result'],
+    items: ReturnType<typeof useUploads>['uploads'],
+  ) {
+    const startPromises: Promise<void>[] = []
+    await act(async () => {
+      for (const item of items) startPromises.push(result.current.startUpload(item))
+      // Real setTimeout (not mocked) gives the event loop a full turn so
+      // the first 3 async startUpload continuations run and update state.
+      await new Promise<void>((r) => setTimeout(r, 30))
+    })
+    return startPromises
+  }
+
+  // Tests ---------------------------------------------------------------------
+
+  it('allows at most 3 file uploads to run concurrently', async () => {
+    const gates = blockingInitiate()
+
+    const { result } = renderHook(() => useUploads())
+    act(() => {
+      result.current.queueFiles(
+        Array.from({ length: 4 }, (_, i) => makeFile(`f${i}.jpg`, 'image/jpeg')),
+      )
+    })
+
+    const startPromises = await startConcurrent(result, [...result.current.uploads])
+
+    expect(result.current.uploads.filter((u) => u.status === 'uploading')).toHaveLength(3)
+    expect(result.current.uploads.filter((u) => u.status === 'queued')).toHaveLength(1)
+
+    // Release all blocked initiates; switch to immediate resolution for the
+    // 4th upload which hasn't called initiateUpload yet.
+    await act(async () => {
+      vi.mocked(api.initiateUpload).mockResolvedValue(makeSession())
+      gates.forEach((g) => g())
+      await Promise.all(startPromises)
+    })
+
+    expect(result.current.uploads.every((u) => u.status === 'completed')).toBe(true)
+  })
+
+  it('promotes the queued upload as soon as a running upload finishes', async () => {
+    const gates = blockingInitiate()
+
+    const { result } = renderHook(() => useUploads())
+    act(() => {
+      result.current.queueFiles(
+        Array.from({ length: 4 }, (_, i) => makeFile(`f${i}.jpg`, 'image/jpeg')),
+      )
+    })
+
+    const startPromises = await startConcurrent(result, [...result.current.uploads])
+    expect(result.current.uploads.filter((u) => u.status === 'queued')).toHaveLength(1)
+
+    // Free one slot: item 0 completes → releases slot → item 3 starts immediately.
+    await act(async () => {
+      vi.mocked(api.initiateUpload).mockResolvedValue(makeSession())
+      gates[0]()
+      await new Promise<void>((r) => setTimeout(r, 30))
+    })
+
+    // No items stuck waiting — the 4th claimed the freed slot
+    expect(result.current.uploads.filter((u) => u.status === 'queued')).toHaveLength(0)
+    // Item 0 completed; the 4th may also have completed (its mocks are instant)
+    expect(result.current.uploads.some((u) => u.status === 'completed')).toBe(true)
+    expect(result.current.uploads.every((u) => ['uploading', 'completed'].includes(u.status))).toBe(true)
+
+    await act(async () => {
+      gates[1]?.()
+      gates[2]?.()
+      await Promise.all(startPromises)
+    })
+  })
+
+  it('does not start an upload that was cancelled while waiting for a slot', async () => {
+    const gates = blockingInitiate()
+
+    const { result } = renderHook(() => useUploads())
+    act(() => {
+      result.current.queueFiles(
+        Array.from({ length: 4 }, (_, i) => makeFile(`f${i}.jpg`, 'image/jpeg')),
+      )
+    })
+
+    const startPromises = await startConcurrent(result, [...result.current.uploads])
+
+    const waitingItem = result.current.uploads.find((u) => u.status === 'queued')!
+    await act(async () => { await result.current.cancelItem(waitingItem) })
+    expect(result.current.uploads.find((u) => u.id === waitingItem.id)?.status).toBe('cancelled')
+
+    // Release one slot — the cancelled item acquires it, sees it's cancelled,
+    // and immediately releases it without calling initiateUpload.
+    await act(async () => {
+      vi.mocked(api.initiateUpload).mockResolvedValue(makeSession())
+      gates[0]()
+      await new Promise<void>((r) => setTimeout(r, 30))
+    })
+
+    expect(result.current.uploads.find((u) => u.id === waitingItem.id)?.status).toBe('cancelled')
+    expect(api.initiateUpload).toHaveBeenCalledTimes(3) // never called for the cancelled item
+
+    await act(async () => {
+      gates[1]?.()
+      gates[2]?.()
+      await Promise.all(startPromises)
+    })
+  })
+})

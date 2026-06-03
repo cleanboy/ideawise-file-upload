@@ -383,6 +383,41 @@ test.describe('Multi-file selection', () => {
   })
 })
 
+// ─── Concurrency control ──────────────────────────────────────────────────────
+
+test.describe('Concurrency control', () => {
+  test('caps simultaneous uploads at 3 — the 4th stays queued until a slot opens', async ({ page }) => {
+    let unblockInitiate!: () => void
+    const gate = new Promise<void>((resolve) => { unblockInitiate = resolve })
+
+    let initiateCount = 0
+    await page.route(`${API}/api/upload/initiate`, async (route) => {
+      await gate
+      initiateCount++
+      await route.fulfill({ json: makeSession({ uploadId: `upload-${initiateCount}` }) })
+    })
+    await page.route(`${API}/api/upload/chunk`, (route) =>
+      route.fulfill({ json: makeSession({ uploadedChunkCount: 1, progress: 100, status: 'uploading' }) }),
+    )
+    await page.route(`${API}/api/upload/finalize`, (route) =>
+      route.fulfill({ json: makeSession({ status: 'completed' }) }),
+    )
+
+    await page.goto('/')
+    await page.setInputFiles('input[type="file"]', makeFiles(4))
+    await page.getByLabel('Select all').check()
+    await page.getByRole('button', { name: 'Start Selected' }).click()
+
+    // Exactly 3 uploading (blocked at initiate), 1 still queued waiting for a slot
+    await expect(page.locator('.status--uploading')).toHaveCount(3)
+    await expect(page.locator('.status--queued')).toHaveCount(1)
+
+    // Unblock initiates → 4th claims the first freed slot, all 4 complete
+    unblockInitiate()
+    await expect(page.locator('.status--completed')).toHaveCount(4, { timeout: 10_000 })
+  })
+})
+
 // ─── Drag and drop ────────────────────────────────────────────────────────────
 
 test.describe('Drag and drop', () => {
