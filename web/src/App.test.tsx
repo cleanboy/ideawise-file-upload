@@ -3,9 +3,14 @@ import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import App from './App'
 import { useUploads } from './hooks/useUploads'
+import { useUploadHistory } from './hooks/useUploadHistory'
 import type { UploadItem } from './types/uploads'
 
 vi.mock('./hooks/useUploads')
+vi.mock('./hooks/useUploadHistory')
+vi.mock('./components/HistoryModal', () => ({
+  HistoryModal: () => <div data-testid="history-modal" />,
+}))
 
 // Minimal stubs for child components — we test their internals in their own files.
 vi.mock('./components/DropZone', () => ({
@@ -79,6 +84,13 @@ function makeItem(id: string, status: UploadItem['status'] = 'queued'): UploadIt
   }
 }
 
+function mockHistory(historyItems: ReturnType<typeof useUploadHistory>['history'] = []) {
+  const addEntry = vi.fn()
+  const clear = vi.fn()
+  vi.mocked(useUploadHistory).mockReturnValue({ history: historyItems, addEntry, clear })
+  return { addEntry, clear }
+}
+
 function mockUploads(items: UploadItem[] = []) {
   const queueFiles = vi.fn()
   const startUpload = vi.fn().mockResolvedValue(undefined)
@@ -100,6 +112,8 @@ function mockUploads(items: UploadItem[] = []) {
 
 beforeEach(() => {
   vi.resetAllMocks()
+  mockHistory()
+  mockUploads()
 })
 
 describe('App', () => {
@@ -221,6 +235,71 @@ describe('App', () => {
       render(<App />)
       await userEvent.click(screen.getByRole('button', { name: 'Select a' }))
       expect(screen.getByTestId('startable').textContent).toBe('false')
+    })
+  })
+
+  describe('history', () => {
+    it('renders the History button', () => {
+      render(<App />)
+      expect(screen.getByRole('button', { name: /history/i })).toBeInTheDocument()
+    })
+
+    it('shows no badge on the History button when history is empty', () => {
+      mockHistory([])
+      const { container } = render(<App />)
+      expect(container.querySelector('.history-trigger__badge')).toBeNull()
+    })
+
+    it('shows a count badge on the History button when history has entries', () => {
+      const entries = [
+        { id: 'e1', name: 'a.jpg', size: 1, type: 'image/jpeg', status: 'completed' as const, savedAt: 1 },
+        { id: 'e2', name: 'b.jpg', size: 1, type: 'image/jpeg', status: 'failed' as const, savedAt: 2 },
+      ]
+      mockHistory(entries)
+      const { container } = render(<App />)
+      expect(container.querySelector('.history-trigger__badge')?.textContent).toBe('2')
+    })
+
+    it('calls addEntry when uploads contains a completed item', () => {
+      const { addEntry } = mockHistory()
+      mockUploads([makeItem('a', 'completed')])
+      render(<App />)
+      expect(addEntry).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'a', status: 'completed' }),
+      )
+    })
+
+    it('calls addEntry when uploads contains a failed item', () => {
+      const { addEntry } = mockHistory()
+      mockUploads([makeItem('a', 'failed')])
+      render(<App />)
+      expect(addEntry).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'a', status: 'failed' }),
+      )
+    })
+
+    it('calls addEntry when uploads contains a cancelled item', () => {
+      const { addEntry } = mockHistory()
+      mockUploads([makeItem('a', 'cancelled')])
+      render(<App />)
+      expect(addEntry).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'a', status: 'cancelled' }),
+      )
+    })
+
+    it('does not call addEntry for queued or uploading items', () => {
+      const { addEntry } = mockHistory()
+      mockUploads([makeItem('a', 'queued'), makeItem('b', 'uploading')])
+      render(<App />)
+      expect(addEntry).not.toHaveBeenCalled()
+    })
+
+    it('does not call addEntry a second time for an already-saved item on re-render', () => {
+      const { addEntry } = mockHistory()
+      mockUploads([makeItem('a', 'completed')])
+      const { rerender } = render(<App />)
+      rerender(<App />)
+      expect(addEntry).toHaveBeenCalledTimes(1)
     })
   })
 })
