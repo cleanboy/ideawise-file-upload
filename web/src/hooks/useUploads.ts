@@ -163,9 +163,10 @@ export function useUploads() {
   }
 
   async function removeItem(item: UploadItem) {
-    cancelledUploads.current.add(item.id)
+    const terminalStatuses = new Set(['completed', 'cancelled', 'rejected'])
 
-    if (item.session?.uploadId) {
+    if (!terminalStatuses.has(item.status) && item.session?.uploadId) {
+      cancelledUploads.current.add(item.id)
       try {
         await deleteUpload(item.session.uploadId)
       } catch (error) {
