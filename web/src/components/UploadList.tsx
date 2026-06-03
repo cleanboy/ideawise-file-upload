@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { UploadItem } from '../types/uploads'
+import { ProgressBar } from './ProgressBar'
 import { UploadCard } from './UploadCard'
 
 type UploadListProps = {
@@ -31,6 +32,12 @@ export function UploadList({
   const allSelected = uploads.length > 0 && selectedIds.size === uploads.length
   const someSelected = selectedIds.size > 0 && !allSelected
 
+  const uploadingItems = uploads.filter((u) => u.status === 'uploading')
+  const showOverall = uploadingItems.length >= 2
+  const overallProgress = showOverall
+    ? uploadingItems.reduce((sum, u) => sum + u.progress, 0) / uploadingItems.length
+    : 0
+
   useEffect(() => {
     if (selectAllRef.current) {
       selectAllRef.current.indeterminate = someSelected
@@ -58,6 +65,13 @@ export function UploadList({
               Start Selected
             </button>
           </div>
+
+          {showOverall && (
+            <div className="overall-progress">
+              <span className="overall-progress__label">Overall progress</span>
+              <ProgressBar label="Overall upload progress" value={overallProgress} />
+            </div>
+          )}
 
           {uploads.map((item) => (
             <UploadCard

@@ -10,14 +10,15 @@ vi.mock('./UploadCard', () => ({
   ),
 }))
 
-function makeItem(id: string, name = `file-${id}.jpg`): UploadItem {
+function makeItem(id: string, overrides: Partial<UploadItem> = {}): UploadItem {
   return {
     id,
-    file: new File([''], name, { type: 'image/jpeg' }),
+    file: new File([''], `file-${id}.jpg`, { type: 'image/jpeg' }),
     status: 'queued',
     progress: 0,
     uploadedChunks: 0,
     totalChunks: 1,
+    ...overrides,
   }
 }
 
@@ -133,5 +134,52 @@ describe('UploadList — with uploads', () => {
     )
     await userEvent.click(screen.getByRole('button', { name: 'Start Selected' }))
     expect(onStartSelected).toHaveBeenCalledOnce()
+  })
+})
+
+describe('UploadList — overall progress', () => {
+  it('does not show overall progress when only one item is uploading', () => {
+    const uploads = [makeItem('1', { status: 'uploading', progress: 50 })]
+    render(<UploadList {...makeProps({ uploads })} />)
+    expect(screen.queryByLabelText('Overall upload progress')).not.toBeInTheDocument()
+  })
+
+  it('does not show overall progress when uploading items are mixed with other statuses', () => {
+    const uploads = [
+      makeItem('1', { status: 'uploading', progress: 50 }),
+      makeItem('2', { status: 'completed', progress: 100 }),
+    ]
+    render(<UploadList {...makeProps({ uploads })} />)
+    expect(screen.queryByLabelText('Overall upload progress')).not.toBeInTheDocument()
+  })
+
+  it('shows overall progress when 2 or more items are uploading', () => {
+    const uploads = [
+      makeItem('1', { status: 'uploading', progress: 40 }),
+      makeItem('2', { status: 'uploading', progress: 60 }),
+    ]
+    render(<UploadList {...makeProps({ uploads })} />)
+    expect(screen.getByLabelText('Overall upload progress')).toBeInTheDocument()
+  })
+
+  it('displays the averaged progress across all uploading items', () => {
+    const uploads = [
+      makeItem('1', { status: 'uploading', progress: 40 }),
+      makeItem('2', { status: 'uploading', progress: 60 }),
+    ]
+    const { container } = render(<UploadList {...makeProps({ uploads })} />)
+    const fill = container.querySelector('.overall-progress .progress-bar span') as HTMLElement
+    expect(fill.style.width).toBe('50%')
+  })
+
+  it('averages correctly across 3 uploading items', () => {
+    const uploads = [
+      makeItem('1', { status: 'uploading', progress: 0 }),
+      makeItem('2', { status: 'uploading', progress: 60 }),
+      makeItem('3', { status: 'uploading', progress: 90 }),
+    ]
+    const { container } = render(<UploadList {...makeProps({ uploads })} />)
+    const fill = container.querySelector('.overall-progress .progress-bar span') as HTMLElement
+    expect(fill.style.width).toBe('50%')
   })
 })
