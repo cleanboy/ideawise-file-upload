@@ -1,3 +1,5 @@
+import * as FileSystem from 'expo-file-system/legacy'
+
 const API_BASE_URL =
   (process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:8080').replace(/\/$/, '')
 
@@ -42,15 +44,32 @@ export async function uploadChunk(
   chunkIndex: number,
   chunkUri: string,
 ): Promise<UploadSession> {
-  const formData = new FormData()
-  formData.append('uploadId', uploadId)
-  formData.append('chunkIndex', String(chunkIndex))
-  formData.append('chunk', { uri: chunkUri, name: 'chunk', type: 'application/octet-stream' } as unknown as Blob)
+  const result = await FileSystem.uploadAsync(
+    `${API_BASE_URL}/api/upload/chunk`,
+    chunkUri,
+    {
+      httpMethod: 'POST',
+      uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+      fieldName: 'chunk',
+      parameters: {
+        uploadId,
+        chunkIndex: String(chunkIndex),
+      },
+    },
+  )
 
-  return requestJson<UploadSession>('/api/upload/chunk', {
-    method: 'POST',
-    body: formData,
-  })
+  if (result.status < 200 || result.status >= 300) {
+    let message = `Request failed with status ${result.status}`
+    try {
+      const payload = JSON.parse(result.body) as UploadApiError
+      message = payload.error?.message ?? payload.error?.code ?? message
+    } catch {
+      // keep fallback message
+    }
+    throw new Error(message)
+  }
+
+  return JSON.parse(result.body) as UploadSession
 }
 
 export async function finalizeUpload(uploadId: string): Promise<UploadSession> {
