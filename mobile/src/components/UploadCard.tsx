@@ -6,6 +6,7 @@ import { Image, Modal, StyleSheet, Text, TouchableOpacity, View, SafeAreaView } 
 import type { UploadItem } from '../types/uploads'
 import { formatBytes } from '../utils/formatBytes'
 import { formatDuration } from '../utils/formatDuration'
+import { CANCELLABLE, STARTABLE } from '../utils/uploadStatus'
 import { ProgressBar } from './ProgressBar'
 import { StatusBadge } from './StatusBadge'
 
@@ -16,9 +17,6 @@ type Props = {
   onCancel: () => void
   onRemove: () => void
 }
-
-const STARTABLE = new Set(['queued', 'paused', 'failed'])
-const CANCELLABLE = new Set(['queued', 'uploading', 'paused'])
 const isVideo = (type: string) => type.startsWith('video/')
 const isImage = (type: string) => type.startsWith('image/')
 

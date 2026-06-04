@@ -1,68 +1,27 @@
 import './App.css'
-import { useEffect, useRef, useState } from 'react'
+import { useRef } from 'react'
 import { DropZone } from './components/DropZone'
 import { HistoryModal } from './components/HistoryModal'
 import { UploadList } from './components/UploadList'
+import { useHistorySync } from './hooks/useHistorySync'
+import { useSelection } from './hooks/useSelection'
 import { useUploadHistory } from './hooks/useUploadHistory'
 import { useUploads } from './hooks/useUploads'
-
-const STARTABLE = new Set(['queued', 'paused', 'failed'])
-type TerminalStatus = 'completed' | 'cancelled' | 'failed'
-const TERMINAL_STATUSES: TerminalStatus[] = ['completed', 'cancelled', 'failed']
-
-function isTerminal(status: string): status is TerminalStatus {
-  return (TERMINAL_STATUSES as string[]).includes(status)
-}
+import { STARTABLE } from './utils/uploadStatus'
 
 function App() {
   const { cancelItem, pauseItem, queueFiles, removeItem, startUpload, uploads } = useUploads()
-  const [selectedIds, setSelectedIds] = useState(new Set<string>())
   const { history, addEntry, clear: clearHistory } = useUploadHistory()
+  const { selectedIds, toggleSelect, toggleSelectAll, startableSelected } = useSelection(uploads)
   const historyDialogRef = useRef<HTMLDialogElement>(null)
-  const savedToHistory = useRef(new Set<string>())
 
-  useEffect(() => {
-    uploads.forEach((item) => {
-      if (savedToHistory.current.has(item.id)) return
-      if (!isTerminal(item.status)) return
-      savedToHistory.current.add(item.id)
-      addEntry({
-        id: item.id,
-        name: item.file.name,
-        size: item.file.size,
-        type: item.file.type,
-        status: item.status,
-        uploadId: item.session?.uploadId,
-        savedAt: Date.now(),
-        error: item.error,
-      })
-    })
-  }, [uploads, addEntry])
-
-  function toggleSelect(id: string) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  function toggleSelectAll() {
-    if (selectedIds.size === uploads.length && uploads.length > 0) {
-      setSelectedIds(new Set())
-    } else {
-      setSelectedIds(new Set(uploads.map((u) => u.id)))
-    }
-  }
+  useHistorySync(uploads, addEntry)
 
   function startSelected() {
     uploads
       .filter((u) => selectedIds.has(u.id) && STARTABLE.has(u.status))
       .forEach((u) => void startUpload(u))
   }
-
-  const startableSelected = uploads.some((u) => selectedIds.has(u.id) && STARTABLE.has(u.status))
 
   return (
     <main className="app-shell">

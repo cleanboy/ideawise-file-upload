@@ -1,8 +1,6 @@
-import * as ImagePicker from 'expo-image-picker'
 import { StatusBar } from 'expo-status-bar'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
-  Alert,
   FlatList,
   Platform,
   StyleSheet,
@@ -14,109 +12,24 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { registerBackgroundUploadTask } from './src/background/uploadTask'
 import { HistoryModal } from './src/components/HistoryModal'
 import { UploadCard } from './src/components/UploadCard'
+import { useFilePicker } from './src/hooks/useFilePicker'
+import { useHistorySync } from './src/hooks/useHistorySync'
 import { useUploadHistory } from './src/hooks/useUploadHistory'
 import { useUploads } from './src/hooks/useUploads'
+import { STARTABLE } from './src/utils/uploadStatus'
 import type { UploadItem } from './src/types/uploads'
-
-const STARTABLE = new Set(['queued', 'paused', 'failed'])
-type TerminalStatus = 'completed' | 'cancelled' | 'failed'
-const TERMINAL: TerminalStatus[] = ['completed', 'cancelled', 'failed']
-
-function isTerminal(s: string): s is TerminalStatus {
-  return (TERMINAL as string[]).includes(s)
-}
 
 export default function App() {
   const { uploads, queueFiles, startUpload, pauseItem, cancelItem, removeItem } = useUploads()
   const { history, addEntry, clear: clearHistory } = useUploadHistory()
+  const { pickFromGallery, pickFromCamera } = useFilePicker(queueFiles)
   const [historyVisible, setHistoryVisible] = useState(false)
-  const savedToHistory = useRef(new Set<string>())
 
-  useEffect(() => {
-    void registerBackgroundUploadTask()
-  }, [])
-
-  // Save terminal uploads to history
-  useEffect(() => {
-    uploads.forEach((item) => {
-      if (savedToHistory.current.has(item.id)) return
-      if (!isTerminal(item.status)) return
-      savedToHistory.current.add(item.id)
-      addEntry({
-        id: item.id,
-        name: item.file.name,
-        size: item.file.size,
-        type: item.file.type,
-        status: item.status,
-        uploadId: item.session?.uploadId,
-        savedAt: Date.now(),
-        error: item.error,
-      })
-    })
-  }, [uploads, addEntry])
-
-  async function pickFromGallery() {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (status !== 'granted') {
-      Alert.alert('Permission required', 'Please allow access to your photo library.')
-      return
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images', 'videos'],
-      allowsMultipleSelection: true,
-      selectionLimit: 10,
-      quality: 1,
-      exif: false,
-    })
-
-    if (!result.canceled) {
-      queueFiles(
-        result.assets.map((asset) => ({
-          uri: asset.uri,
-          name: asset.fileName ?? `media_${Date.now()}`,
-          size: asset.fileSize ?? 0,
-          type: asset.mimeType ?? 'application/octet-stream',
-          width: asset.width ?? undefined,
-          height: asset.height ?? undefined,
-          duration: asset.duration ?? undefined,
-        })),
-      )
-    }
-  }
-
-  async function pickFromCamera() {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync()
-    if (status !== 'granted') {
-      Alert.alert('Permission required', 'Please allow camera access.')
-      return
-    }
-
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ['images', 'videos'],
-      quality: 1,
-    })
-
-    if (!result.canceled) {
-      const asset = result.assets[0]
-      queueFiles([
-        {
-          uri: asset.uri,
-          name: asset.fileName ?? `capture_${Date.now()}`,
-          size: asset.fileSize ?? 0,
-          type: asset.mimeType ?? 'application/octet-stream',
-          width: asset.width ?? undefined,
-          height: asset.height ?? undefined,
-          duration: asset.duration ?? undefined,
-        },
-      ])
-    }
-  }
+  useEffect(() => { void registerBackgroundUploadTask() }, [])
+  useHistorySync(uploads, addEntry)
 
   function uploadAll() {
-    uploads
-      .filter((u) => STARTABLE.has(u.status))
-      .forEach((u) => void startUpload(u))
+    uploads.filter((u) => STARTABLE.has(u.status)).forEach((u) => void startUpload(u))
   }
 
   const pendingCount = uploads.filter((u) => STARTABLE.has(u.status)).length
