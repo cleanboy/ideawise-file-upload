@@ -44,7 +44,7 @@ export function UploadCard({ item, onStart, onPause, onCancel, onRemove }: Props
             <StatusBadge status={item.status} />
           </View>
           <View style={styles.metaRows}>
-            <MetaRow label="Type" value={item.file.name.split('.').pop()?.toUpperCase() ?? item.file.type.split('/')[0]} />
+            <MetaRow label="Type" value={item.file.name.split('.').pop()?.toUpperCase() || item.file.type.split('/')[0]} />
             <MetaRow label="Size" value={formatBytes(item.file.size)} />
             {item.file.width != null && item.file.height != null && (
               <MetaRow label="Resolution" value={`${item.file.width} × ${item.file.height}`} />
