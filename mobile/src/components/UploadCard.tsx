@@ -118,6 +118,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#111827',
+    flex: 1,
   },
   progressRow: {
     marginTop: 10,
