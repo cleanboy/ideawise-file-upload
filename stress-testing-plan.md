@@ -85,6 +85,40 @@ Simulates a sudden burst (e.g. app users all pressing Upload at the same time af
 network reconnect). Tests cold-start behaviour: PHP-FPM process spawning, MySQL connection
 establishment, and whether queued requests time out before workers become available.
 
+### 4.4 Abandoned Upload — 20 VUs for 2 minutes
+
+Each VU initiates an upload, sends the first 50% of chunks, then stops without calling
+finalize — simulating a user closing the app or a hard network drop mid-upload. The
+session is never cleaned up within the test window.
+
+**What this exposes:** Whether the server accumulates orphaned sessions gracefully. If
+FPM workers are held by long-running requests or database rows accumulate without
+consequence, 20 concurrent abandonments over 2 minutes will surface it. The `/status`
+endpoint is checked after the partial upload to confirm the server returns a coherent
+in-progress state.
+
+### 4.5 Resume — 20 VUs for 3 minutes
+
+Each VU uploads the first ~50 % of chunks, pauses 1–4 seconds (simulating a reconnect
+delay), calls `GET /api/upload/status/{id}` to retrieve the server's confirmed
+`uploadedChunks` list, then uploads only the missing chunks and finalizes.
+
+**What this exposes:** Whether the `/status` endpoint returns an accurate chunk list
+after a partial upload (the `status_accuracy_rate` metric catches phantom entries).
+Also exercises the idempotency of re-uploading a chunk index that the server may
+have partially recorded before the disconnect.
+
+### 4.6 Slow / degraded network — 30 VUs for 3 minutes
+
+Each VU completes the full upload lifecycle but sleeps 150–500 ms between each chunk
+batch, mimicking a mobile client on a congested 3G or high-latency cellular link.
+
+**What this exposes:** Whether the server times out still-active connections and whether
+FPM workers are held idle during the inter-batch pauses. Because each HTTP request
+completes before the sleep begins, FPM workers are released between requests — this
+scenario confirms the server's keepalive and timeout settings do not penalise slow
+clients that do continue making progress.
+
 ---
 
 ## 5. Virtual User Behaviour
@@ -257,6 +291,22 @@ chunk requests with file profile + chunk index).
 **Remediation:** Replace the JSON array with a bitmask or a separate `upload_chunks`
 table with one row per chunk, avoiding full array rewrite on each update.
 
+### 7.7 Orphaned session disk accumulation
+
+**Risk:** Abandoned uploads leave chunk files in `var/uploads/chunks/<id>/` indefinitely.
+No expiry or cleanup job exists in the current implementation. Under sustained abandonment
+load (e.g. the §4.4 scenario running repeatedly), disk usage grows without bound. On a
+Docker volume this will not show up in `df` on the host — use `docker compose exec php du -sh var/uploads`
+to measure.
+
+**Signature:** Disk space exhaustion causes chunk writes to fail with `ENOSPC`. This
+surfaces as HTTP 500 on `POST /chunk` for all sessions, not just abandoned ones.
+
+**Remediation:** Add a scheduled cleanup command (`doctrine:query:dql` or a Symfony
+console command) that deletes sessions in `uploading` state older than a configurable
+TTL (e.g. 24 h) along with their chunk directories. The `cancel` endpoint already
+performs this cleanup on demand — a cron-based sweep reuses the same storage service method.
+
 ---
 
 ## 8. Infrastructure Setup
@@ -281,20 +331,34 @@ Before running:
 # Install k6 (once)
 brew install k6
 
-# Run baseline
-k6 run --vus 10 --duration 2m stress/upload.js
+# ── Load scenarios (stress/upload.js) ─────────────────────────────────────────
 
-# Run ramp-to-100 (defined in scenario config inside the script)
+# Run baseline (10 VUs, 2 min)
+k6 run --env SCENARIO=baseline stress/upload.js
+
+# Run ramp-to-100 (default — 0→100 VUs over 30 s, hold 2 min, ramp down)
 k6 run stress/upload.js
 
-# Run spike
+# Run spike (instant 100 VUs)
 k6 run --env SCENARIO=spike stress/upload.js
 
-# With JSON output for post-analysis
-k6 run stress/upload.js --out json=results/ramp-$(date +%Y%m%dT%H%M).json
-```
+# ── Network failure scenarios (stress/network-failure.js) ─────────────────────
 
-The test script lives at `stress/upload.js` (to be created alongside this plan).
+# Abandoned upload: 20 VUs initiate + partial-upload, then disconnect
+k6 run --env SCENARIO=abandoned stress/network-failure.js
+
+# Resume: 20 VUs disconnect mid-upload, reconnect via /status, then complete
+k6 run --env SCENARIO=resume stress/network-failure.js
+
+# Slow network: 30 VUs complete full uploads with 150-500 ms inter-batch delays
+k6 run --env SCENARIO=slow_network stress/network-failure.js
+
+# ── Output options ─────────────────────────────────────────────────────────────
+
+# Save raw metrics for post-analysis or Grafana import
+k6 run stress/upload.js --out json=results/ramp-$(date +%Y%m%dT%H%M).json
+k6 run --env SCENARIO=resume stress/network-failure.js --out json=results/resume-$(date +%Y%m%dT%H%M).json
+```
 
 ---
 
@@ -309,3 +373,17 @@ scenario, steady-state period only):
 
 A threshold breach is a signal to profile the specific bottleneck (§7) before tuning and
 re-running.
+
+### Network failure scenarios (`stress/network-failure.js`)
+
+These scenarios have separate pass/fail criteria because client behaviour is intentionally
+abnormal:
+
+| Scenario | Pass condition |
+|----------|----------------|
+| `abandoned` | No threshold on completion rate (abandonment is intentional). `http_req_failed{name:initiate}` < 2 %, `http_req_duration` thresholds all met — confirms server stays healthy under orphan pressure. |
+| `resume` | `resume_completion_rate` ≥ 95 %. `status_accuracy_rate` ≥ 99 % (server never reports a chunk index the client did not successfully send). |
+| `slow_network` | `slow_completion_rate` ≥ 97 %. All latency thresholds met — slow clients must not degrade latency for other sessions. |
+
+**After running `abandoned`:** check `docker compose exec php du -sh var/uploads/chunks`
+to confirm orphaned chunk directories are present and assess disk growth rate (see §7.7).
