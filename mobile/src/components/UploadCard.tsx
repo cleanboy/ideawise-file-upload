@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons'
 import * as VideoThumbnails from 'expo-video-thumbnails'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { useEffect, useState } from 'react'
-import { Image, Modal, StyleSheet, Text, TouchableOpacity, View, SafeAreaView } from 'react-native'
+import { Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import type { UploadItem } from '../types/uploads'
 import { formatBytes } from '../utils/formatBytes'
 import { formatDuration } from '../utils/formatDuration'
@@ -29,7 +30,7 @@ function VideoPreviewModal({ uri, onClose }: { uri: string; onClose: () => void 
   return (
     <Modal animationType="fade" presentationStyle="fullScreen" onRequestClose={onClose}>
       <SafeAreaView style={preview.container}>
-        <VideoView player={player} style={preview.video} allowsFullscreen contentFit="contain" />
+        <VideoView player={player} style={preview.video} contentFit="contain" />
         <TouchableOpacity style={preview.closeBtn} onPress={onClose}>
           <Text style={preview.closeText}>✕</Text>
         </TouchableOpacity>
