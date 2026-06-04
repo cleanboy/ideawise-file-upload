@@ -29,4 +29,6 @@ RUN echo "upload_max_filesize=512M" >> "$PHP_INI_DIR/php.ini" \
     && echo "post_max_size=512M" >> "$PHP_INI_DIR/php.ini" \
     && echo "max_execution_time=300" >> "$PHP_INI_DIR/php.ini"
 
+COPY zz-uploads.conf /usr/local/etc/php-fpm.d/zz-uploads.conf
+
 CMD ["php-fpm"]
