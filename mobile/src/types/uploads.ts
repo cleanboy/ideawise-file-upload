@@ -5,6 +5,9 @@ export type MediaFile = {
   name: string
   size: number
   type: string
+  width?: number
+  height?: number
+  duration?: number
 }
 
 export type UploadStatus =

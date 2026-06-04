@@ -77,6 +77,9 @@ export default function App() {
           name: asset.fileName ?? `media_${Date.now()}`,
           size: asset.fileSize ?? 0,
           type: asset.mimeType ?? 'application/octet-stream',
+          width: asset.width ?? undefined,
+          height: asset.height ?? undefined,
+          duration: asset.duration ?? undefined,
         })),
       )
     }
@@ -102,6 +105,9 @@ export default function App() {
           name: asset.fileName ?? `capture_${Date.now()}`,
           size: asset.fileSize ?? 0,
           type: asset.mimeType ?? 'application/octet-stream',
+          width: asset.width ?? undefined,
+          height: asset.height ?? undefined,
+          duration: asset.duration ?? undefined,
         },
       ])
     }

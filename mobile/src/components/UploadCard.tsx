@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { Image, Modal, StyleSheet, Text, TouchableOpacity, View, SafeAreaView } from 'react-native'
 import type { UploadItem } from '../types/uploads'
 import { formatBytes } from '../utils/formatBytes'
+import { formatDuration } from '../utils/formatDuration'
 import { ProgressBar } from './ProgressBar'
 import { StatusBadge } from './StatusBadge'
 
@@ -56,6 +57,21 @@ const preview = StyleSheet.create({
   closeText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 })
 
+function MetaRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={metaRow.row}>
+      <Text style={metaRow.label}>{label}</Text>
+      <Text style={metaRow.value}>{value}</Text>
+    </View>
+  )
+}
+
+const metaRow = StyleSheet.create({
+  row: { flexDirection: 'row', gap: 4 },
+  label: { fontSize: 11, color: '#9ca3af', fontWeight: '500', width: 68 },
+  value: { fontSize: 11, color: '#374151', fontWeight: '500', flexShrink: 1 },
+})
+
 export function UploadCard({ item, onStart, onPause, onCancel, onRemove }: Props) {
   const [thumbnailUri, setThumbnailUri] = useState<string | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
@@ -97,9 +113,21 @@ export function UploadCard({ item, onStart, onPause, onCancel, onRemove }: Props
         {renderThumb()}
 
         <View style={styles.meta}>
-          <Text style={styles.name} numberOfLines={1}>{item.file.name}</Text>
-          <Text style={styles.sub}>{formatBytes(item.file.size)} · {item.file.type.split('/')[0]}</Text>
-          <StatusBadge status={item.status} />
+          <View style={styles.nameRow}>
+            <Text style={styles.name} numberOfLines={1}>{item.file.name}</Text>
+            <StatusBadge status={item.status} />
+          </View>
+          <View style={styles.metaRows}>
+            <MetaRow label="Type" value={item.file.name.split('.').pop()?.toUpperCase() ?? item.file.type.split('/')[0]} />
+            <MetaRow label="Size" value={formatBytes(item.file.size)} />
+            {item.file.width != null && item.file.height != null && (
+              <MetaRow label="Resolution" value={`${item.file.width} × ${item.file.height}`} />
+            )}
+            {item.file.duration != null && (
+              <MetaRow label="Duration" value={formatDuration(item.file.duration / 1000)} />
+            )}
+            <MetaRow label="Chunks" value={`${item.uploadedChunks} / ${item.totalChunks}`} />
+          </View>
         </View>
       </View>
 
@@ -190,8 +218,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   thumb: {
-    width: 52,
-    height: 52,
+    width: 104,
+    height: 104,
     borderRadius: 8,
     overflow: 'hidden',
     backgroundColor: '#1e293b',
@@ -203,8 +231,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     left: 0,
-    width: 52,
-    height: 52,
+    width: 104,
+    height: 104,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.3)',
@@ -213,6 +241,15 @@ const styles = StyleSheet.create({
   meta: {
     flex: 1,
     gap: 3,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 6,
+  },
+  metaRows: {
+    gap: 1,
   },
   name: {
     fontSize: 14,
