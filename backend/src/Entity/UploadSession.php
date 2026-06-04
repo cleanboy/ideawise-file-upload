@@ -16,6 +16,8 @@ class UploadSession
     public const STATUS_COMPLETED = 'completed';
     public const STATUS_CANCELLED = 'cancelled';
     public const STATUS_FAILED = 'failed';
+    public const STATUS_EXPIRED = 'expired';
+    public const STATUS_PURGED = 'purged';
 
     #[ORM\Id]
     #[ORM\Column(type: Types::GUID)]
@@ -47,6 +49,9 @@ class UploadSession
 
     #[ORM\Column(length: 1024, nullable: true)]
     private ?string $finalPath = null;
+
+    #[ORM\Column(length: 32, nullable: true)]
+    private ?string $checksum = null;
 
     #[ORM\Column]
     private DateTimeImmutable $createdAt;
@@ -180,10 +185,21 @@ class UploadSession
         $this->touch();
     }
 
-    public function complete(string $finalPath): void
+    public function getFinalPath(): ?string
+    {
+        return $this->finalPath;
+    }
+
+    public function getChecksum(): ?string
+    {
+        return $this->checksum;
+    }
+
+    public function complete(string $finalPath, string $checksum): void
     {
         $this->status = self::STATUS_COMPLETED;
         $this->finalPath = $finalPath;
+        $this->checksum = $checksum;
         $this->completedAt = new DateTimeImmutable();
         $this->touch();
     }
@@ -197,6 +213,19 @@ class UploadSession
     public function fail(): void
     {
         $this->status = self::STATUS_FAILED;
+        $this->touch();
+    }
+
+    public function expire(): void
+    {
+        $this->status = self::STATUS_EXPIRED;
+        $this->touch();
+    }
+
+    public function purge(): void
+    {
+        $this->status = self::STATUS_PURGED;
+        $this->finalPath = null;
         $this->touch();
     }
 

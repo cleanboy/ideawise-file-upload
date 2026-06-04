@@ -59,6 +59,28 @@ class UploadStorageTest extends TestCase
         self::assertStringEndsWith('demo-video.mp4', $finalPath);
     }
 
+    public function testComputesChecksumOfAssembledFile(): void
+    {
+        $storage = new UploadStorage($this->storagePath);
+        $session = new UploadSession(
+            'a1b2c3d4-0000-0000-0000-000000000001',
+            'image.jpg',
+            'image/jpeg',
+            6,
+            3,
+            2,
+        );
+
+        $storage->writeChunk($session->getId(), 0, 'abc');
+        $storage->writeChunk($session->getId(), 1, 'def');
+
+        $finalPath = $storage->assemble($session);
+        $checksum = $storage->computeChecksum($finalPath);
+
+        self::assertSame(md5('abcdef'), $checksum);
+        self::assertMatchesRegularExpression('/^[0-9a-f]{32}$/', $checksum);
+    }
+
     public function testListsStoredChunkIndexes(): void
     {
         $storage = new UploadStorage($this->storagePath);

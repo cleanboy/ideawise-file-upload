@@ -36,7 +36,7 @@ readonly class UploadStorage
 
     public function assemble(UploadSession $session): string
     {
-        $completedDirectory = $this->uploadStoragePath.'/completed';
+        $completedDirectory = $this->uploadStoragePath.'/completed/'.(new \DateTimeImmutable())->format('Y/m/d');
         $this->ensureDirectory($completedDirectory);
 
         $finalPath = $completedDirectory.'/'.$session->getId().'-'.$this->sanitizeFilename($session->getOriginalFilename());
@@ -68,6 +68,17 @@ readonly class UploadStorage
         }
 
         return $finalPath;
+    }
+
+    public function computeChecksum(string $filePath): string
+    {
+        $checksum = md5_file($filePath);
+
+        if ($checksum === false) {
+            throw new RuntimeException(sprintf('Unable to compute checksum for %s.', $filePath));
+        }
+
+        return $checksum;
     }
 
     public function removeUpload(string $uploadId): void

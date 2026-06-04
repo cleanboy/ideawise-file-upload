@@ -4,6 +4,7 @@ namespace App\Controller;
 
 use App\Entity\UploadSession;
 use App\Repository\UploadSessionRepository;
+use App\Service\FileTypeValidator;
 use App\Service\UploadStorage;
 use Doctrine\ORM\EntityManagerInterface;
 use JsonException;
@@ -21,6 +22,7 @@ class UploadController extends AbstractController
         private readonly EntityManagerInterface $entityManager,
         private readonly UploadSessionRepository $uploadSessions,
         private readonly UploadStorage $storage,
+        private readonly FileTypeValidator $fileTypeValidator,
     ) {
     }
 
@@ -40,6 +42,10 @@ class UploadController extends AbstractController
 
         if ($filename === '' || $fileSize <= 0 || $chunkSize <= 0) {
             return $this->error('invalid_request', 'filename, fileSize, and chunkSize are required.', 400);
+        }
+
+        if (!$this->fileTypeValidator->isAllowedMimeType($mimeType)) {
+            return $this->error('unsupported_file_type', 'Only image and video files are accepted.', 415);
         }
 
         $session = new UploadSession(
@@ -122,15 +128,35 @@ class UploadController extends AbstractController
 
         try {
             $finalPath = $this->storage->assemble($session);
-            $session->complete($finalPath);
-            $this->storage->removeUpload($session->getId());
-            $this->entityManager->flush();
         } catch (Throwable) {
             $session->fail();
             $this->entityManager->flush();
 
             return $this->error('storage_error', 'Upload could not be finalized.', 500);
         }
+
+        try {
+            $this->fileTypeValidator->assertValidMagicBytes($finalPath);
+        } catch (Throwable) {
+            @unlink($finalPath);
+            $session->fail();
+            $this->entityManager->flush();
+
+            return $this->error('invalid_file_content', 'File content does not match an allowed media type.', 415);
+        }
+
+        $checksum = $this->storage->computeChecksum($finalPath);
+        $duplicate = $this->uploadSessions->findCompletedByChecksum($checksum);
+
+        if ($duplicate instanceof UploadSession) {
+            // Identical file already stored — discard the new copy and reuse the existing path.
+            @unlink($finalPath);
+            $finalPath = $duplicate->getFinalPath() ?? $finalPath;
+        }
+
+        $session->complete($finalPath, $checksum);
+        $this->storage->removeUpload($session->getId());
+        $this->entityManager->flush();
 
         return $this->json($this->serializeSession($session));
     }
@@ -229,6 +255,7 @@ class UploadController extends AbstractController
             'uploadedChunkCount' => $session->getUploadedChunkCount(),
             'progress' => $session->getProgressPercent(),
             'status' => $session->getStatus(),
+            'checksum' => $session->getChecksum(),
             'createdAt' => $session->getCreatedAt()->format(DATE_ATOM),
             'updatedAt' => $session->getUpdatedAt()->format(DATE_ATOM),
             'completedAt' => $session->getCompletedAt()?->format(DATE_ATOM),
