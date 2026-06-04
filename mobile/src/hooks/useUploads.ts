@@ -1,5 +1,5 @@
 import * as FileSystem from 'expo-file-system/legacy'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   cancelUpload,
   deleteUpload,
@@ -10,7 +10,9 @@ import {
   type UploadSession,
 } from '../api/uploads'
 import type { MediaFile, UploadItem } from '../types/uploads'
+import { writeChunkToTemp } from '../utils/fileChunk'
 import { sleep } from '../utils/sleep'
+import { loadQueue, persistQueue } from '../utils/uploadQueue'
 
 function generateId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
@@ -26,6 +28,19 @@ const ACCEPTED_TYPES = ['image/', 'video/']
 
 export function useUploads() {
   const [uploads, setUploads] = useState<UploadItem[]>([])
+  const loaded = useRef(false)
+
+  useEffect(() => {
+    loadQueue()
+      .then((items) => { if (items.length > 0) setUploads(items) })
+      .finally(() => { loaded.current = true })
+  }, [])
+
+  useEffect(() => {
+    if (!loaded.current) return
+    void persistQueue(uploads)
+  }, [uploads])
+
   const cancelledUploads = useRef(new Set<string>())
   const pausedUploads = useRef(new Set<string>())
   const activeUploadCount = useRef(0)
@@ -269,15 +284,3 @@ export function useUploads() {
   return { uploads, queueFiles, startUpload, pauseItem, cancelItem, removeItem }
 }
 
-async function writeChunkToTemp(fileUri: string, position: number, length: number): Promise<string> {
-  const base64 = await FileSystem.readAsStringAsync(fileUri, {
-    encoding: FileSystem.EncodingType.Base64,
-    position,
-    length,
-  })
-  const tempUri = `${FileSystem.cacheDirectory ?? ''}chunk_${Date.now()}_${Math.random().toString(36).slice(2)}.bin`
-  await FileSystem.writeAsStringAsync(tempUri, base64, {
-    encoding: FileSystem.EncodingType.Base64,
-  })
-  return tempUri
-}

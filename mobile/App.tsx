@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   FlatList,
   Platform,
@@ -11,13 +11,16 @@ import {
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { registerBackgroundUploadTask } from './src/background/uploadTask'
 import { HistoryModal } from './src/components/HistoryModal'
+import { ProgressBar } from './src/components/ProgressBar'
 import { UploadCard } from './src/components/UploadCard'
+import { useAppStateUpload } from './src/hooks/useAppStateUpload'
 import { useFilePicker } from './src/hooks/useFilePicker'
 import { useHistorySync } from './src/hooks/useHistorySync'
+import { notifyUploadComplete, useNotifications } from './src/hooks/useNotifications'
 import { useUploadHistory } from './src/hooks/useUploadHistory'
 import { useUploads } from './src/hooks/useUploads'
-import { STARTABLE } from './src/utils/uploadStatus'
 import type { UploadItem } from './src/types/uploads'
+import { STARTABLE } from './src/utils/uploadStatus'
 
 export default function App() {
   const { uploads, queueFiles, startUpload, pauseItem, cancelItem, removeItem } = useUploads()
@@ -26,13 +29,30 @@ export default function App() {
   const [historyVisible, setHistoryVisible] = useState(false)
 
   useEffect(() => { void registerBackgroundUploadTask() }, [])
+  useNotifications()
   useHistorySync(uploads, addEntry)
+  useAppStateUpload({ uploads, startUpload })
+
+  const notifiedRef = useRef(new Set<string>())
+  useEffect(() => {
+    uploads.forEach((u) => {
+      if (u.status === 'completed' && !notifiedRef.current.has(u.id)) {
+        notifiedRef.current.add(u.id)
+        void notifyUploadComplete(u.file.name)
+      }
+    })
+  }, [uploads])
 
   function uploadAll() {
     uploads.filter((u) => STARTABLE.has(u.status)).forEach((u) => void startUpload(u))
   }
 
   const pendingCount = uploads.filter((u) => STARTABLE.has(u.status)).length
+  const activeUploads = uploads.filter((u) => u.status === 'uploading')
+  const overallProgress =
+    activeUploads.length > 0
+      ? activeUploads.reduce((sum, u) => sum + u.progress, 0) / activeUploads.length
+      : 0
 
   const renderItem = ({ item }: { item: UploadItem }) => (
     <UploadCard
@@ -77,6 +97,18 @@ export default function App() {
             </TouchableOpacity>
           )}
         </View>
+
+        {activeUploads.length > 0 && (
+          <View style={styles.overallProgress}>
+            <View style={styles.overallProgressHeader}>
+              <Text style={styles.overallProgressLabel}>
+                {activeUploads.length} file{activeUploads.length !== 1 ? 's' : ''} uploading
+              </Text>
+              <Text style={styles.overallProgressPct}>{Math.round(overallProgress)}%</Text>
+            </View>
+            <ProgressBar progress={overallProgress} color="#2563eb" />
+          </View>
+        )}
 
         <FlatList
           data={uploads}
@@ -181,6 +213,34 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 15,
     fontWeight: '700',
+  },
+  overallProgress: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 12,
+    gap: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  overallProgressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  overallProgressLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  overallProgressPct: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#2563eb',
   },
   list: {
     paddingHorizontal: 16,
