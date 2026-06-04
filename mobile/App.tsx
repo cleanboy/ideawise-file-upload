@@ -5,12 +5,12 @@ import {
   Alert,
   FlatList,
   Platform,
-  SafeAreaView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native'
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { registerBackgroundUploadTask } from './src/background/uploadTask'
 import { HistoryModal } from './src/components/HistoryModal'
 import { UploadCard } from './src/components/UploadCard'
@@ -126,57 +126,59 @@ export default function App() {
   )
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar style="dark" />
+    <SafeAreaProvider>
+      <SafeAreaView style={styles.safe}>
+        <StatusBar style="dark" />
 
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.eyebrow}>Media File Upload</Text>
-          <Text style={styles.title}>Mobile Uploader</Text>
-        </View>
-        <TouchableOpacity style={styles.historyBtn} onPress={() => setHistoryVisible(true)}>
-          <Text style={styles.historyBtnText}>History</Text>
-          {history.length > 0 && (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{history.length}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.pickerRow}>
-        <TouchableOpacity style={styles.pickerBtn} onPress={() => void pickFromGallery()}>
-          <Text style={styles.pickerBtnText}>Gallery</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.pickerBtn} onPress={() => void pickFromCamera()}>
-          <Text style={styles.pickerBtnText}>Camera</Text>
-        </TouchableOpacity>
-        {pendingCount > 0 && (
-          <TouchableOpacity style={[styles.pickerBtn, styles.uploadAllBtn]} onPress={uploadAll}>
-            <Text style={styles.pickerBtnText}>Upload all ({pendingCount})</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      <FlatList
-        data={uploads}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={styles.list}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyText}>Pick files from your gallery or camera to get started.</Text>
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.eyebrow}>Media File Upload</Text>
+            <Text style={styles.title}>Mobile Uploader</Text>
           </View>
-        }
-      />
+          <TouchableOpacity style={styles.historyBtn} onPress={() => setHistoryVisible(true)}>
+            <Text style={styles.historyBtnText}>History</Text>
+            {history.length > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{history.length}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
 
-      <HistoryModal
-        visible={historyVisible}
-        entries={history}
-        onClear={clearHistory}
-        onClose={() => setHistoryVisible(false)}
-      />
-    </SafeAreaView>
+        <View style={styles.pickerRow}>
+          <TouchableOpacity style={styles.pickerBtn} onPress={() => void pickFromGallery()}>
+            <Text style={styles.pickerBtnText}>Gallery</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.pickerBtn} onPress={() => void pickFromCamera()}>
+            <Text style={styles.pickerBtnText}>Camera</Text>
+          </TouchableOpacity>
+          {pendingCount > 0 && (
+            <TouchableOpacity style={[styles.pickerBtn, styles.uploadAllBtn]} onPress={uploadAll}>
+              <Text style={styles.pickerBtnText}>Upload all ({pendingCount})</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <FlatList
+          data={uploads}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          contentContainerStyle={styles.list}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Text style={styles.emptyText}>Pick files from your gallery or camera to get started.</Text>
+            </View>
+          }
+        />
+
+        <HistoryModal
+          visible={historyVisible}
+          entries={history}
+          onClear={clearHistory}
+          onClose={() => setHistoryVisible(false)}
+        />
+      </SafeAreaView>
+    </SafeAreaProvider>
   )
 }
 
