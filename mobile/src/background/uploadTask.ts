@@ -1,37 +1,38 @@
-import * as BackgroundFetch from 'expo-background-fetch'
+import * as BackgroundTask from 'expo-background-task'
 import * as TaskManager from 'expo-task-manager'
 import { loadHistory } from '../utils/uploadHistory'
 
 export const BACKGROUND_UPLOAD_TASK = 'BACKGROUND_UPLOAD_CHECK'
 
-// Defines the task once at module load time (must be called outside of React components).
 TaskManager.defineTask(BACKGROUND_UPLOAD_TASK, async () => {
   try {
     const history = await loadHistory()
     const hasPending = history.some((e) => e.status !== 'completed' && e.status !== 'cancelled')
     return hasPending
-      ? BackgroundFetch.BackgroundFetchResult.NewData
-      : BackgroundFetch.BackgroundFetchResult.NoData
+      ? BackgroundTask.BackgroundTaskResult.Success
+      : BackgroundTask.BackgroundTaskResult.Failed
   } catch {
-    return BackgroundFetch.BackgroundFetchResult.Failed
+    return BackgroundTask.BackgroundTaskResult.Failed
   }
 })
 
 export async function registerBackgroundUploadTask(): Promise<void> {
   try {
-    await BackgroundFetch.registerTaskAsync(BACKGROUND_UPLOAD_TASK, {
-      minimumInterval: 60,   // iOS: minimum interval in seconds
-      stopOnTerminate: false, // Android: keep running after app close
-      startOnBoot: true,      // Android: start on device boot
+    const status = await BackgroundTask.getStatusAsync()
+    if (status !== BackgroundTask.BackgroundTaskStatus.Available) return
+    await BackgroundTask.registerTaskAsync(BACKGROUND_UPLOAD_TASK, {
+      minimumInterval: 60,
+      stopOnTerminate: false,
+      startOnBoot: true,
     })
   } catch {
-    // Background fetch not available (simulator, restricted device, etc.)
+    // Background tasks not available (Expo Go, simulator, restricted device, etc.)
   }
 }
 
 export async function unregisterBackgroundUploadTask(): Promise<void> {
   try {
-    await BackgroundFetch.unregisterTaskAsync(BACKGROUND_UPLOAD_TASK)
+    await BackgroundTask.unregisterTaskAsync(BACKGROUND_UPLOAD_TASK)
   } catch {
     // Already unregistered
   }
