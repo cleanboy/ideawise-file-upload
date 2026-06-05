@@ -75,36 +75,36 @@ export function UploadCard({ item, selected, onCancel, onPause, onRemove, onStar
       ) : null}
 
       <div className="actions">
-        {item.status === 'uploading' ? (
-          <button type="button" onClick={() => onPause(item)}>
-            Pause
-          </button>
-        ) : (
+        {item.status !== 'completed' && (
+          item.status === 'uploading' ? (
+            <button type="button" onClick={() => onPause(item)}>
+              Pause
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onStart(item)}
+              disabled={item.status === 'rejected'}
+            >
+              {item.status === 'failed' ? 'Retry' : item.status === 'paused' ? 'Resume' : 'Start'}
+            </button>
+          )
+        )}
+        {item.status !== 'completed' && (
           <button
             type="button"
-            onClick={() => onStart(item)}
-            disabled={item.status === 'completed' || item.status === 'rejected'}
+            className="button-secondary"
+            onClick={() => onCancel(item)}
+            disabled={item.status === 'cancelled' || item.status === 'rejected'}
           >
-            {item.status === 'failed' ? 'Retry' : item.status === 'paused' ? 'Resume' : 'Start'}
+            Cancel
           </button>
         )}
         <button
           type="button"
           className="button-secondary"
-          onClick={() => onCancel(item)}
-          disabled={
-            item.status === 'completed' ||
-            item.status === 'cancelled' ||
-            item.status === 'rejected'
-          }
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          className="button-secondary"
           onClick={() => onRemove(item)}
-          disabled={item.status === 'uploading' || item.status === 'completed'}
+          disabled={item.status === 'uploading'}
         >
           Remove
         </button>

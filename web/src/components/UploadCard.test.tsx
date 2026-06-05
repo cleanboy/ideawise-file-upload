@@ -174,9 +174,15 @@ describe('UploadCard — buttons', () => {
     expect(screen.getByRole('button', { name: 'Resume' })).toBeInTheDocument()
   })
 
-  it('disables Start when status is completed', () => {
+  it('hides Start and Cancel buttons when status is completed', () => {
     render(<UploadCard item={makeItem({ status: 'completed' })} {...makeProps()} />)
-    expect(screen.getByRole('button', { name: 'Start' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument()
+  })
+
+  it('enables Remove button when status is completed', () => {
+    render(<UploadCard item={makeItem({ status: 'completed' })} {...makeProps()} />)
+    expect(screen.getByRole('button', { name: 'Remove' })).toBeEnabled()
   })
 
   it('disables Start when status is rejected', () => {
@@ -184,7 +190,7 @@ describe('UploadCard — buttons', () => {
     expect(screen.getByRole('button', { name: 'Start' })).toBeDisabled()
   })
 
-  it.each(['completed', 'cancelled', 'rejected'] as const)(
+  it.each(['cancelled', 'rejected'] as const)(
     'disables Cancel when status is %s',
     (status) => {
       render(
@@ -194,8 +200,8 @@ describe('UploadCard — buttons', () => {
     },
   )
 
-  it.each(['uploading', 'completed'] as const)('disables Remove when status is %s', (status) => {
-    render(<UploadCard item={makeItem({ status })} {...makeProps()} />)
+  it('disables Remove when status is uploading', () => {
+    render(<UploadCard item={makeItem({ status: 'uploading' })} {...makeProps()} />)
     expect(screen.getByRole('button', { name: 'Remove' })).toBeDisabled()
   })
 
