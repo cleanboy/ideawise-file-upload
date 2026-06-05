@@ -306,10 +306,16 @@ describe('removeItem', () => {
     expect(api.deleteUpload).not.toHaveBeenCalled()
   })
 
-  it('calls deleteUpload and removes the item when it has a session', async () => {
-    const result = await runSuccessfulUpload()
-    vi.mocked(api.deleteUpload).mockResolvedValue(undefined)
+  it('calls deleteUpload and removes the item when it has a session and is not completed', async () => {
+    // Use a failed item — it has a session from initiateUpload but is not in terminalStatuses
+    vi.mocked(api.initiateUpload).mockResolvedValue(makeSession())
+    vi.mocked(api.uploadChunk).mockRejectedValue(new Error('Network error'))
+    const { result } = renderHook(() => useUploads())
+    act(() => { result.current.queueFiles([makeFile('photo.jpg', 'image/jpeg')]) })
+    await act(async () => { await result.current.startUpload(result.current.uploads[0]) })
+    expect(result.current.uploads[0].status).toBe('failed')
 
+    vi.mocked(api.deleteUpload).mockResolvedValue(undefined)
     await act(async () => { await result.current.removeItem(result.current.uploads[0]) })
 
     expect(api.deleteUpload).toHaveBeenCalledWith('upload-1')
@@ -317,13 +323,28 @@ describe('removeItem', () => {
   })
 
   it('keeps the item and sets an error when deleteUpload throws', async () => {
-    const result = await runSuccessfulUpload()
-    vi.mocked(api.deleteUpload).mockRejectedValue(new Error('Delete failed'))
+    vi.mocked(api.initiateUpload).mockResolvedValue(makeSession())
+    vi.mocked(api.uploadChunk).mockRejectedValue(new Error('Network error'))
+    const { result } = renderHook(() => useUploads())
+    act(() => { result.current.queueFiles([makeFile('photo.jpg', 'image/jpeg')]) })
+    await act(async () => { await result.current.startUpload(result.current.uploads[0]) })
+    expect(result.current.uploads[0].status).toBe('failed')
 
+    vi.mocked(api.deleteUpload).mockRejectedValue(new Error('Delete failed'))
     await act(async () => { await result.current.removeItem(result.current.uploads[0]) })
 
     expect(result.current.uploads).toHaveLength(1)
     expect(result.current.uploads[0].error).toBe('Delete failed')
+  })
+
+  it('removes a completed item from the list without calling deleteUpload', async () => {
+    const result = await runSuccessfulUpload()
+    vi.mocked(api.deleteUpload).mockResolvedValue(undefined)
+
+    await act(async () => { await result.current.removeItem(result.current.uploads[0]) })
+
+    expect(api.deleteUpload).not.toHaveBeenCalled()
+    expect(result.current.uploads).toHaveLength(0)
   })
 })
 
