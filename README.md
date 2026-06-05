@@ -110,6 +110,42 @@ See [`mobile/README.md`](mobile/README.md) for the full setup guide, including f
 
 ---
 
+## Security & Storage
+
+### Rate limiting
+
+Rate limiting is applied only to `POST /api/upload/initiate` — the endpoint that creates a new upload session. Chunk uploads, finalization, and status queries are unrestricted.
+
+This is an intentional design decision: limiting every chunk upload would prevent legitimate large file transfers from completing (a 23 MB file at 1 MB chunks requires 23 requests). The abuse vector is session spam, not chunk volume, so the limit sits at session creation.
+
+| Endpoint | Limit |
+|---|---|
+| `POST /api/upload/initiate` | 10 requests / minute per IP |
+| All other `/api/upload/*` endpoints | No limit |
+
+Exceeded requests receive a `429` response with a `Retry-After` header.
+
+### File type validation
+
+The initiate endpoint rejects MIME types that are not images or video (`415 Unsupported Media Type`). After assembly, the finalize step re-validates the file against its binary magic numbers — a mismatch (e.g. a renamed executable) causes the assembled file to be discarded and the request to fail.
+
+### File deduplication
+
+An MD5 checksum is computed on the assembled file at finalize time. If an identical file has already been stored, the new copy is discarded and the session is linked to the existing path. This prevents duplicate storage without affecting the upload API surface.
+
+### Storage layout
+
+Completed files are written to `completed/YYYY/MM/DD/` under the storage root.
+
+### Maintenance commands
+
+| Command | Purpose |
+|---|---|
+| `app:cleanup-uploads` | Removes incomplete sessions idle for more than 30 minutes and deletes their temporary chunks |
+| `app:purge-uploads` | Deletes completed files older than 30 days; respects shared paths created by deduplication |
+
+---
+
 ## Architecture Overview
 
 ```

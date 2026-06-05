@@ -32,7 +32,7 @@ class RateLimitSubscriberTest extends TestCase
     {
         $this->limiter->method('consume')->willReturn($this->rateLimit(accepted: true));
 
-        $event = $this->makeEvent(Request::create('/api/upload/status/abc'));
+        $event = $this->makeEvent(Request::create('/api/upload/initiate'));
         $this->subscriber->onKernelRequest($event);
 
         self::assertNull($event->getResponse());
@@ -62,13 +62,24 @@ class RateLimitSubscriberTest extends TestCase
             $this->rateLimit(accepted: false, remaining: 0, retryAfter: $retryAfter),
         );
 
-        $event = $this->makeEvent(Request::create('/api/upload/chunk'));
+        $event = $this->makeEvent(Request::create('/api/upload/initiate'));
         $this->subscriber->onKernelRequest($event);
 
         $headers = $event->getResponse()->headers;
         self::assertSame('10', $headers->get('X-RateLimit-Limit'));
         self::assertSame('0', $headers->get('X-RateLimit-Remaining'));
         self::assertNotNull($headers->get('Retry-After'));
+    }
+
+    public function testSkipsNonInitiatePaths(): void
+    {
+        $this->limiterService->expects(self::never())->method('create');
+
+        foreach (['/api/upload/chunk', '/api/upload/finalize', '/api/upload/status/abc', '/api/upload/cancel/abc'] as $path) {
+            $event = $this->makeEvent(Request::create($path));
+            $this->subscriber->onKernelRequest($event);
+            self::assertNull($event->getResponse(), "Expected no rate limit response for $path");
+        }
     }
 
     public function testSkipsNonUploadPaths(): void
@@ -96,7 +107,7 @@ class RateLimitSubscriberTest extends TestCase
     {
         $this->limiter->method('consume')->willReturn($this->rateLimit(accepted: true));
 
-        $request = Request::create('/api/upload/status/abc');
+        $request = Request::create('/api/upload/initiate');
         $request->server->set('REMOTE_ADDR', '203.0.113.5');
 
         $this->limiterService->expects(self::once())->method('create')->with('203.0.113.5');

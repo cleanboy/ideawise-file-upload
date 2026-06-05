@@ -22,7 +22,7 @@ class RateLimitSubscriber implements EventSubscriberInterface
 
         $request = $event->getRequest();
 
-        if (!str_starts_with($request->getPathInfo(), '/api/upload')) {
+        if ($request->getPathInfo() !== '/api/upload/initiate') {
             return;
         }
 
@@ -38,7 +38,7 @@ class RateLimitSubscriber implements EventSubscriberInterface
         $response = new JsonResponse([
             'error' => [
                 'code' => 'rate_limit_exceeded',
-                'message' => 'Too many requests. Maximum 10 upload requests per minute.',
+                'message' => 'Too many requests. Maximum 10 upload sessions per minute.',
             ],
         ], 429);
 
