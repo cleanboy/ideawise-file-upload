@@ -1,11 +1,12 @@
 import './App.css'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { DropZone } from './components/DropZone'
 import { HistoryModal } from './components/HistoryModal'
 import { MonitoringDashboard } from './components/MonitoringDashboard'
 import { UploadList } from './components/UploadList'
 import { useHistorySync } from './hooks/useHistorySync'
 import { useMonitoring } from './hooks/useMonitoring'
+import { useNotifications } from './hooks/useNotifications'
 import { useSelection } from './hooks/useSelection'
 import { useUploadHistory } from './hooks/useUploadHistory'
 import { useUploads } from './hooks/useUploads'
@@ -18,8 +19,20 @@ function App() {
   const historyDialogRef = useRef<HTMLDialogElement>(null)
   const [monitoringOpen, setMonitoringOpen] = useState(false)
   const { metrics, connected, error } = useMonitoring(monitoringOpen)
+  const { requestPermission, notifyCompleted } = useNotifications()
 
   useHistorySync(uploads, addEntry)
+
+  useEffect(() => {
+    uploads
+      .filter((item) => item.status === 'completed')
+      .forEach((item) => notifyCompleted(item))
+  }, [uploads, notifyCompleted])
+
+  function handleQueueFiles(files: FileList) {
+    void requestPermission()
+    queueFiles(files)
+  }
 
   function startSelected() {
     uploads
@@ -38,7 +51,7 @@ function App() {
           </p>
         </div>
 
-        <DropZone onFilesSelected={queueFiles} />
+        <DropZone onFilesSelected={handleQueueFiles} />
 
         <div className="upload-panel__actions">
           <button
