@@ -155,6 +155,18 @@ mobile/
 
 ---
 
+## Known Limitations
+
+### iOS background uploads
+
+On iOS, the JavaScript thread is suspended immediately when the app is backgrounded, which interrupts any in-flight chunk uploads. The `expo-background-task` periodic task will resume queued uploads the next time the OS grants background time, but there is no guarantee of continuity mid-upload.
+
+True background uploading on iOS requires `NSURLSession` background transfer sessions, which operate at the native layer and are not interrupted by JS thread suspension. Implementing this would mean replacing the fetch-based chunked upload logic with a native module — outside the scope of this project.
+
+**Android** does not have this limitation. The JS thread continues running while the app is backgrounded (until the OS kills the process), so uploads proceed normally.
+
+---
+
 ## Troubleshooting
 
 **`PluginError: Failed to resolve plugin for module "expo-dev-client"`**

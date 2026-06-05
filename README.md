@@ -161,6 +161,12 @@ Completed files are written to `completed/YYYY/MM/DD/` under the storage root.
 
 ---
 
+## Known Limitations
+
+**iOS background uploads** — On iOS, the JavaScript thread is suspended when the app is backgrounded, interrupting in-flight uploads. The background task will retry queued items when the OS next grants background time, but mid-upload continuity is not guaranteed. True iOS background uploading requires `NSURLSession` native background transfer sessions, which are not implemented. Android is unaffected. See [`mobile/README.md`](mobile/README.md) for details.
+
+---
+
 ## Architecture Overview
 
 ```
