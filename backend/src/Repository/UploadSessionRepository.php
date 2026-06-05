@@ -56,6 +56,71 @@ class UploadSessionRepository extends ServiceEntityRepository
     }
 
     /**
+     * @return array<string, int>  status => count for every status present in the table
+     */
+    public function getStatusCounts(): array
+    {
+        $rows = $this->createQueryBuilder('s')
+            ->select('s.status', 'COUNT(s.id) AS cnt')
+            ->groupBy('s.status')
+            ->getQuery()
+            ->getResult();
+
+        $counts = [];
+        foreach ($rows as $row) {
+            $counts[$row['status']] = (int) $row['cnt'];
+        }
+
+        return $counts;
+    }
+
+    /**
+     * @return array{completed: int, failed: int, throughputBytes: int}
+     */
+    public function getLast24hOutcomes(): array
+    {
+        $since = new DateTimeImmutable('-24 hours');
+
+        $rows = $this->createQueryBuilder('s')
+            ->select('s.status', 'COUNT(s.id) AS cnt', 'SUM(s.fileSize) AS totalBytes')
+            ->where('s.updatedAt >= :since')
+            ->andWhere('s.status IN (:statuses)')
+            ->setParameter('since', $since)
+            ->setParameter('statuses', [UploadSession::STATUS_COMPLETED, UploadSession::STATUS_FAILED])
+            ->groupBy('s.status')
+            ->getQuery()
+            ->getResult();
+
+        $result = ['completed' => 0, 'failed' => 0, 'throughputBytes' => 0];
+
+        foreach ($rows as $row) {
+            if ($row['status'] === UploadSession::STATUS_COMPLETED) {
+                $result['completed'] = (int) $row['cnt'];
+                $result['throughputBytes'] = (int) $row['totalBytes'];
+            } elseif ($row['status'] === UploadSession::STATUS_FAILED) {
+                $result['failed'] = (int) $row['cnt'];
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Returns all sessions currently being uploaded, newest first.
+     *
+     * @return UploadSession[]
+     */
+    public function findActive(): array
+    {
+        return $this->createQueryBuilder('s')
+            ->where('s.status IN (:statuses)')
+            ->setParameter('statuses', [UploadSession::STATUS_INITIATED, UploadSession::STATUS_UPLOADING])
+            ->orderBy('s.updatedAt', 'DESC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
      * Returns in-progress sessions that have not been updated since $olderThan.
      *
      * @return UploadSession[]

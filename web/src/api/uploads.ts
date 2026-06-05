@@ -21,8 +21,7 @@ export type UploadApiError = {
   }
 }
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? 'http://localhost:8080'
+import { API_BASE_URL } from './config'
 
 export async function initiateUpload(file: File, chunkSize: number): Promise<UploadSession> {
   return requestJson<UploadSession>('/api/upload/initiate', {
