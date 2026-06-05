@@ -1,6 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy'
 import { useEffect, useRef, useState } from 'react'
 import {
+  ApiError,
   cancelUpload,
   deleteUpload,
   finalizeUpload,
@@ -240,28 +241,45 @@ export function useUploads() {
     chunkIndex: number,
     chunkUri: string,
   ): Promise<UploadSession> {
+    const label = `Chunk ${chunkIndex + 1}/${session.totalChunks}`
+
     for (let attempt = 1; attempt <= MAX_CHUNK_RETRIES + 1; attempt++) {
       try {
         return await uploadChunk(session.uploadId, chunkIndex, chunkUri)
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Chunk could not be uploaded.'
 
+        if (error instanceof ApiError && !error.isRetryable) {
+          throw new Error(`${label} failed: ${message}`, { cause: error })
+        }
+
         if (attempt > MAX_CHUNK_RETRIES) {
           throw new Error(
-            `Chunk ${chunkIndex + 1}/${session.totalChunks} failed after ${MAX_CHUNK_RETRIES} retries: ${message}`,
+            `${label} failed after ${MAX_CHUNK_RETRIES} retries: ${message}`,
             { cause: error },
           )
         }
 
-        updateUpload(itemId, {
-          error: `Chunk ${chunkIndex + 1}/${session.totalChunks} failed: ${message}. Retrying ${attempt}/${MAX_CHUNK_RETRIES}.`,
-        })
+        let delayMs: number
 
-        await sleep(500 * 2 ** (attempt - 1))
+        if (error instanceof ApiError && error.status === 429) {
+          delayMs = error.retryAfterMs ?? 500 * 2 ** (attempt - 1)
+          const seconds = Math.ceil(delayMs / 1000)
+          updateUpload(itemId, {
+            error: `${label}: Rate limited — retrying in ${seconds}s (${attempt}/${MAX_CHUNK_RETRIES})`,
+          })
+        } else {
+          delayMs = 500 * 2 ** (attempt - 1)
+          updateUpload(itemId, {
+            error: `${label} failed: ${message}. Retrying ${attempt}/${MAX_CHUNK_RETRIES}.`,
+          })
+        }
+
+        await sleep(delayMs)
       }
     }
 
-    throw new Error(`Chunk ${chunkIndex + 1}/${session.totalChunks} could not be uploaded.`)
+    throw new Error(`${label} could not be uploaded.`)
   }
 
   function updateFromSession(id: string, session: UploadSession, override?: Partial<UploadItem>) {

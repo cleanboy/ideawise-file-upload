@@ -3,6 +3,33 @@ import * as FileSystem from 'expo-file-system/legacy'
 const API_BASE_URL =
   (process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:8080').replace(/\/$/, '')
 
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly retryAfterMs?: number,
+  ) {
+    super(message)
+    this.name = 'ApiError'
+  }
+
+  get isRetryable(): boolean {
+    return this.status >= 500 || this.status === 429
+  }
+}
+
+export function parseRetryAfterMs(value: string | null | undefined): number | undefined {
+  if (!value) return undefined
+  const seconds = Number(value)
+  if (!isNaN(seconds) && seconds > 0) return Math.round(seconds * 1000)
+  const date = new Date(value)
+  if (!isNaN(date.getTime())) {
+    const ms = date.getTime() - Date.now()
+    return ms > 0 ? ms : undefined
+  }
+  return undefined
+}
+
 export type UploadSession = {
   uploadId: string
   filename: string
@@ -66,7 +93,9 @@ export async function uploadChunk(
     } catch {
       // keep fallback message
     }
-    throw new Error(message)
+    const retryAfterRaw = Object.entries(result.headers ?? {})
+      .find(([k]) => k.toLowerCase() === 'retry-after')?.[1]
+    throw new ApiError(message, result.status, parseRetryAfterMs(retryAfterRaw))
   }
 
   return JSON.parse(result.body) as UploadSession
@@ -107,7 +136,7 @@ async function requestJson<T>(path: string, init: RequestInit): Promise<T> {
     } catch {
       // keep fallback message
     }
-    throw new Error(message)
+    throw new ApiError(message, response.status, parseRetryAfterMs(response.headers.get('Retry-After')))
   }
 
   if (response.status === 204) return undefined as T
