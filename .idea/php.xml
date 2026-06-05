@@ -106,6 +106,9 @@
       <path value="$PROJECT_DIR$/backend/vendor/symfony/doctrine-bridge" />
       <path value="$PROJECT_DIR$/backend/vendor/symfony/var-exporter" />
       <path value="$PROJECT_DIR$/backend/vendor/symfony/flex" />
+      <path value="$PROJECT_DIR$/backend/vendor/symfony/lock" />
+      <path value="$PROJECT_DIR$/backend/vendor/symfony/options-resolver" />
+      <path value="$PROJECT_DIR$/backend/vendor/symfony/rate-limiter" />
     </include_path>
   </component>
   <component name="PhpProjectSharedConfiguration" php_language_level="8.1">
