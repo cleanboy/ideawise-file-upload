@@ -88,6 +88,8 @@ The installed dev build on your device will connect to Metro automatically.
 | `npm run android` | Build and run on Android emulator/device |
 | `npm run ios` | Build and run on iOS simulator/device |
 | `npm start` | Start Metro bundler (dev build must already be installed) |
+| `npm test` | Run unit tests (Jest) |
+| `npm run test:watch` | Run tests in watch mode |
 
 ---
 

@@ -69,6 +69,14 @@ docker compose exec php php bin/console doctrine:migrations:migrate --no-interac
 | MySQL | localhost:3306 |
 | Redis | localhost:6379 |
 
+### Reset the database
+
+```bash
+docker compose exec php php bin/console doctrine:database:drop --force
+docker compose exec php php bin/console doctrine:database:create
+docker compose exec php php bin/console doctrine:migrations:migrate --no-interaction
+```
+
 ### Run backend tests
 
 ```bash
@@ -94,6 +102,13 @@ The app runs at **http://localhost:5173** and expects the backend at `http://loc
 The mobile app requires a **development build** — it uses native modules (`expo-notifications`, `expo-background-task`, `expo-camera`) that are not available in the standard Expo Go client.
 
 See [`mobile/README.md`](mobile/README.md) for the full setup guide, including first-time build instructions for Android and iOS.
+
+### Run mobile tests
+
+```bash
+cd mobile
+npm test
+```
 
 ---
 
