@@ -8,6 +8,7 @@ use App\Service\FileTypeValidator;
 use App\Service\UploadStorage;
 use Doctrine\ORM\EntityManagerInterface;
 use JsonException;
+use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -23,6 +24,7 @@ class UploadController extends AbstractController
         private readonly UploadSessionRepository $uploadSessions,
         private readonly UploadStorage $storage,
         private readonly FileTypeValidator $fileTypeValidator,
+        private readonly LoggerInterface $logger,
     ) {
     }
 
@@ -45,6 +47,8 @@ class UploadController extends AbstractController
         }
 
         if (!$this->fileTypeValidator->isAllowedMimeType($mimeType)) {
+            $this->logger->warning('Upload rejected: unsupported MIME type', ['filename' => $filename, 'mimeType' => $mimeType]);
+
             return $this->error('unsupported_file_type', 'Only image and video files are accepted.', 415);
         }
 
@@ -59,6 +63,14 @@ class UploadController extends AbstractController
 
         $this->entityManager->persist($session);
         $this->entityManager->flush();
+
+        $this->logger->info('Upload session initiated', [
+            'uploadId' => $session->getId(),
+            'filename' => $filename,
+            'mimeType' => $mimeType,
+            'fileSize' => $fileSize,
+            'totalChunks' => $session->getTotalChunks(),
+        ]);
 
         return $this->json($this->serializeSession($session), 201);
     }
@@ -93,9 +105,13 @@ class UploadController extends AbstractController
             $session->markChunkUploaded($chunkIndex);
             $this->syncStoredChunks($session);
             $this->entityManager->flush();
-        } catch (Throwable) {
+        } catch (Throwable $e) {
+            $this->logger->error('Chunk storage failed', ['uploadId' => $uploadId, 'chunkIndex' => $chunkIndex, 'error' => $e->getMessage()]);
+
             return $this->error('storage_error', sprintf('Chunk %d could not be stored.', $chunkIndex), 500);
         }
+
+        $this->logger->debug('Chunk stored', ['uploadId' => $uploadId, 'chunkIndex' => $chunkIndex]);
 
         return $this->json($this->serializeSession($session));
     }
@@ -128,7 +144,8 @@ class UploadController extends AbstractController
 
         try {
             $finalPath = $this->storage->assemble($session);
-        } catch (Throwable) {
+        } catch (Throwable $e) {
+            $this->logger->error('Upload assembly failed', ['uploadId' => $session->getId(), 'error' => $e->getMessage()]);
             $session->fail();
             $this->entityManager->flush();
 
@@ -138,6 +155,7 @@ class UploadController extends AbstractController
         try {
             $this->fileTypeValidator->assertValidMagicBytes($finalPath);
         } catch (Throwable) {
+            $this->logger->warning('Magic bytes validation failed', ['uploadId' => $session->getId(), 'filename' => $session->getOriginalFilename()]);
             @unlink($finalPath);
             $session->fail();
             $this->entityManager->flush();
@@ -149,7 +167,7 @@ class UploadController extends AbstractController
         $duplicate = $this->uploadSessions->findCompletedByChecksum($checksum);
 
         if ($duplicate instanceof UploadSession) {
-            // Identical file already stored — discard the new copy and reuse the existing path.
+            $this->logger->info('Duplicate file detected, reusing existing path', ['uploadId' => $session->getId(), 'checksum' => $checksum]);
             @unlink($finalPath);
             $finalPath = $duplicate->getFinalPath() ?? $finalPath;
         }
@@ -157,6 +175,8 @@ class UploadController extends AbstractController
         $session->complete($finalPath, $checksum);
         $this->storage->removeUpload($session->getId());
         $this->entityManager->flush();
+
+        $this->logger->info('Upload finalized', ['uploadId' => $session->getId(), 'checksum' => $checksum, 'deduplicated' => $duplicate instanceof UploadSession]);
 
         return $this->json($this->serializeSession($session));
     }
@@ -191,6 +211,8 @@ class UploadController extends AbstractController
         $this->storage->removeUpload($session->getId());
         $this->entityManager->flush();
 
+        $this->logger->info('Upload session cancelled', ['uploadId' => $session->getId()]);
+
         return $this->json($this->serializeSession($session));
     }
 
@@ -210,6 +232,8 @@ class UploadController extends AbstractController
         $this->storage->removeUpload($session->getId());
         $this->entityManager->remove($session);
         $this->entityManager->flush();
+
+        $this->logger->info('Upload session deleted', ['uploadId' => $session->getId()]);
 
         return $this->json(null, 204);
     }

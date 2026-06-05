@@ -5,6 +5,7 @@ namespace App\Command;
 use App\Repository\UploadSessionRepository;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -21,6 +22,7 @@ class PurgeCompletedUploadsCommand extends Command
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly UploadSessionRepository $uploadSessions,
+        private readonly LoggerInterface $logger,
     ) {
         parent::__construct();
     }
@@ -52,6 +54,7 @@ class PurgeCompletedUploadsCommand extends Command
 
         if ($sessions === []) {
             $io->info(sprintf('No completed uploads older than %d day(s) to purge.', $days));
+            $this->logger->info('Purge run: no purgeable sessions found', ['retentionDays' => $days]);
 
             return Command::SUCCESS;
         }
@@ -64,6 +67,9 @@ class PurgeCompletedUploadsCommand extends Command
             if ($path !== null && !in_array($path, $deletedPaths, true)) {
                 if (is_file($path)) {
                     @unlink($path);
+                    $this->logger->info('Purged file', ['path' => $path, 'uploadId' => $session->getId()]);
+                } else {
+                    $this->logger->warning('File not found during purge', ['path' => $path, 'uploadId' => $session->getId()]);
                 }
                 $deletedPaths[] = $path;
             }
@@ -79,6 +85,7 @@ class PurgeCompletedUploadsCommand extends Command
             count($deletedPaths),
             $days,
         ));
+        $this->logger->info('Purge run complete', ['purgedSessions' => count($sessions), 'deletedFiles' => count($deletedPaths), 'retentionDays' => $days]);
 
         return Command::SUCCESS;
     }

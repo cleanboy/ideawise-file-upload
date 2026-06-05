@@ -6,6 +6,7 @@ use App\Repository\UploadSessionRepository;
 use App\Service\UploadStorage;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -23,6 +24,7 @@ class CleanUpIncompleteUploadsCommand extends Command
         private readonly EntityManagerInterface $entityManager,
         private readonly UploadSessionRepository $uploadSessions,
         private readonly UploadStorage $storage,
+        private readonly LoggerInterface $logger,
     ) {
         parent::__construct();
     }
@@ -54,6 +56,7 @@ class CleanUpIncompleteUploadsCommand extends Command
 
         if ($staleSessions === []) {
             $io->info('No stale incomplete uploads found.');
+            $this->logger->info('Cleanup run: no stale incomplete uploads found', ['timeoutMinutes' => $timeout]);
 
             return Command::SUCCESS;
         }
@@ -61,11 +64,13 @@ class CleanUpIncompleteUploadsCommand extends Command
         foreach ($staleSessions as $session) {
             $this->storage->removeUpload($session->getId());
             $session->expire();
+            $this->logger->info('Incomplete upload expired', ['uploadId' => $session->getId()]);
         }
 
         $this->entityManager->flush();
 
         $io->success(sprintf('Expired %d incomplete upload(s) idle for more than %d minute(s).', count($staleSessions), $timeout));
+        $this->logger->info('Cleanup run complete', ['expiredCount' => count($staleSessions), 'timeoutMinutes' => $timeout]);
 
         return Command::SUCCESS;
     }
