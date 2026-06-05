@@ -7,6 +7,7 @@ type UploadListProps = {
   uploads: UploadItem[]
   selectedIds: Set<string>
   startableSelected: boolean
+  onAttachFile: (item: UploadItem, file: File) => void
   onCancel: (item: UploadItem) => void
   onPause: (item: UploadItem) => void
   onRemove: (item: UploadItem) => void
@@ -20,6 +21,7 @@ export function UploadList({
   uploads,
   selectedIds,
   startableSelected,
+  onAttachFile,
   onCancel,
   onPause,
   onRemove,
@@ -78,6 +80,7 @@ export function UploadList({
               key={item.id}
               item={item}
               selected={selectedIds.has(item.id)}
+              onAttachFile={onAttachFile}
               onCancel={onCancel}
               onPause={onPause}
               onRemove={onRemove}

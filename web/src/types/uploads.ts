@@ -12,4 +12,5 @@ export type UploadItem = {
   totalChunks: number
   error?: string
   session?: UploadSession
+  needsFile?: boolean
 }

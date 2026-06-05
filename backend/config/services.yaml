@@ -21,6 +21,14 @@ services:
             - '../src/Entity/'
             - '../src/Kernel.php'
 
+    Predis\Client:
+        arguments:
+            - '%env(REDIS_URL)%'
+
+    App\Service\ChunkCacheService:
+        arguments:
+            $redis: '@Predis\Client'
+
     App\Service\UploadStorage:
         arguments:
             $uploadStoragePath: '%upload_storage_path%'

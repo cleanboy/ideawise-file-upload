@@ -165,6 +165,16 @@ Completed files are written to `completed/YYYY/MM/DD/` under the storage root.
 
 **iOS background uploads** — On iOS, the JavaScript thread is suspended when the app is backgrounded, interrupting in-flight uploads. The background task will retry queued items when the OS next grants background time, but mid-upload continuity is not guaranteed. True iOS background uploading requires `NSURLSession` native background transfer sessions, which are not implemented. Android is unaffected. See [`mobile/README.md`](mobile/README.md) for details.
 
+**Web upload state requires file re-selection after a page refresh** — When a web upload is interrupted (browser close, refresh, navigation away), the session metadata (upload ID, progress, chunk list) is persisted to `localStorage` and restored on next load. However, the browser `File` object — the actual reference to the file on disk — cannot be serialized to `localStorage`, which stores strings only. As a result, restored sessions are shown in a paused state with a "Select file to resume" prompt, and the user must re-select the original file before the upload can continue.
+
+Two alternatives were considered and rejected:
+
+- **IndexedDB with raw `File` storage** — IndexedDB can store `Blob`/`File` objects directly, which would eliminate re-selection. Rejected because it duplicates the file binary in browser storage. For files up to the 2 GB limit this is routinely impractical: the browser would need to hold both the original file and a full copy in IndexedDB, and browser storage quotas (typically 60% of available disk space) would frequently block it for large media files.
+
+- **File System Access API (`FileSystemFileHandle` stored in IndexedDB)** — This API provides a serializable handle to a file on disk without copying its content. Storing the handle in IndexedDB and calling `handle.getFile()` on restore would give back the real `File` object with no storage overhead. Rejected because Firefox does not support the File System Access API. Requiring a Chromium or Safari browser for a core upload feature is not an acceptable constraint.
+
+The mobile app does not have this limitation because React Native has direct access to the device file system by path, so sessions are resumed from the original file path without re-selection.
+
 ---
 
 ## Architecture Overview

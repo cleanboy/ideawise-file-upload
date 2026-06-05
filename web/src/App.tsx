@@ -12,7 +12,7 @@ import { useUploads } from './hooks/useUploads'
 import { STARTABLE } from './utils/uploadStatus'
 
 function App() {
-  const { cancelItem, pauseItem, queueFiles, removeItem, startUpload, uploads } = useUploads()
+  const { attachFile, cancelItem, pauseItem, queueFiles, removeItem, startUpload, uploads } = useUploads()
   const { history, addEntry, clear: clearHistory } = useUploadHistory()
   const { selectedIds, toggleSelect, toggleSelectAll, startableSelected } = useSelection(uploads)
   const historyDialogRef = useRef<HTMLDialogElement>(null)
@@ -74,6 +74,7 @@ function App() {
         uploads={uploads}
         selectedIds={selectedIds}
         startableSelected={startableSelected}
+        onAttachFile={attachFile}
         onCancel={(item) => void cancelItem(item)}
         onPause={(item) => pauseItem(item)}
         onRemove={(item) => void removeItem(item)}

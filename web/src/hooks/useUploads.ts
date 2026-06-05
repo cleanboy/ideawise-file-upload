@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   cancelUpload,
   deleteUpload,
@@ -9,6 +9,7 @@ import {
   type UploadSession,
 } from '../api/uploads'
 import type { UploadItem } from '../types/uploads'
+import { loadPersistedUploads, persistUploads } from '../utils/uploadPersistence'
 import { sleep } from '../utils/sleep'
 
 const CHUNK_SIZE = 1024 * 1024
@@ -20,7 +21,11 @@ const MAX_FILES_PER_SELECTION = 10
 const ACCEPTED_TYPES = ['image/', 'video/']
 
 export function useUploads() {
-  const [uploads, setUploads] = useState<UploadItem[]>([])
+  const [uploads, setUploads] = useState<UploadItem[]>(() => loadPersistedUploads())
+
+  useEffect(() => {
+    persistUploads(uploads)
+  }, [uploads])
   const cancelledUploads = useRef(new Set<string>())
   const pausedUploads = useRef(new Set<string>())
   const activeUploadCount = useRef(0)
@@ -86,8 +91,16 @@ export function useUploads() {
     setUploads((current) => [...items, ...current])
   }
 
+  function attachFile(item: UploadItem, file: File) {
+    const updated = { ...item, file, needsFile: false }
+    setUploads((current) =>
+      current.map((upload) => (upload.id === item.id ? updated : upload)),
+    )
+    void startUpload(updated)
+  }
+
   async function startUpload(item: UploadItem) {
-    if (item.status === 'rejected') return
+    if (item.status === 'rejected' || item.needsFile) return
     cancelledUploads.current.delete(item.id)
     pausedUploads.current.delete(item.id)
 
@@ -278,5 +291,6 @@ export function useUploads() {
     pauseItem,
     cancelItem,
     removeItem,
+    attachFile,
   }
 }

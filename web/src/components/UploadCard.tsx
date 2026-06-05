@@ -1,3 +1,4 @@
+import { useRef, type ChangeEvent } from 'react'
 import type { UploadItem } from '../types/uploads'
 import { usePreview } from '../hooks/usePreview'
 import { formatBytes } from '../utils/formatBytes'
@@ -8,6 +9,7 @@ import { StatusBadge } from './StatusBadge'
 type UploadCardProps = {
   item: UploadItem
   selected: boolean
+  onAttachFile: (item: UploadItem, file: File) => void
   onCancel: (item: UploadItem) => void
   onPause: (item: UploadItem) => void
   onRemove: (item: UploadItem) => void
@@ -15,7 +17,14 @@ type UploadCardProps = {
   onToggleSelect: (id: string) => void
 }
 
-export function UploadCard({ item, selected, onCancel, onPause, onRemove, onStart, onToggleSelect }: UploadCardProps) {
+export function UploadCard({ item, selected, onAttachFile, onCancel, onPause, onRemove, onStart, onToggleSelect }: UploadCardProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  function handleFileSelect(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (file) onAttachFile(item, file)
+  }
+
   const isRejected = item.status === 'rejected'
   const isPreviewable =
     item.file.type.startsWith('image/') || item.file.type.startsWith('video/')
@@ -55,7 +64,7 @@ export function UploadCard({ item, selected, onCancel, onPause, onRemove, onStar
             {preview?.duration !== undefined && (
               <><dt>Duration</dt><dd>{formatDuration(preview.duration)}</dd></>
             )}
-            <dt>Size</dt><dd>{formatBytes(item.file.size)}</dd>
+            <dt>Size</dt><dd>{formatBytes(item.session?.fileSize ?? item.file.size)}</dd>
             {!isRejected && <><dt>Chunks</dt><dd>{item.uploadedChunks} / {item.totalChunks}</dd></>}
           </dl>
         </div>
@@ -74,40 +83,68 @@ export function UploadCard({ item, selected, onCancel, onPause, onRemove, onStar
         <p className={isRejected ? 'rejection-reason' : 'error-message'}>{item.error}</p>
       ) : null}
 
+      {item.needsFile && (
+        <p className="resume-hint">Select the original file to resume this upload</p>
+      )}
+
       <div className="actions">
-        {item.status !== 'completed' && (
-          item.status === 'uploading' ? (
-            <button type="button" onClick={() => onPause(item)}>
-              Pause
+        {item.needsFile ? (
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,video/*"
+              style={{ display: 'none' }}
+              onChange={handleFileSelect}
+            />
+            <button type="button" onClick={() => fileInputRef.current?.click()}>
+              Select file to resume
             </button>
-          ) : (
             <button
               type="button"
-              onClick={() => onStart(item)}
-              disabled={item.status === 'rejected'}
+              className="button-secondary"
+              onClick={() => onRemove(item)}
             >
-              {item.status === 'failed' ? 'Retry' : item.status === 'paused' ? 'Resume' : 'Start'}
+              Remove
             </button>
-          )
+          </>
+        ) : (
+          <>
+            {item.status !== 'completed' && (
+              item.status === 'uploading' ? (
+                <button type="button" onClick={() => onPause(item)}>
+                  Pause
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onStart(item)}
+                  disabled={item.status === 'rejected'}
+                >
+                  {item.status === 'failed' ? 'Retry' : item.status === 'paused' ? 'Resume' : 'Start'}
+                </button>
+              )
+            )}
+            {item.status !== 'completed' && (
+              <button
+                type="button"
+                className="button-secondary"
+                onClick={() => onCancel(item)}
+                disabled={item.status === 'cancelled' || item.status === 'rejected'}
+              >
+                Cancel
+              </button>
+            )}
+            <button
+              type="button"
+              className="button-secondary"
+              onClick={() => onRemove(item)}
+              disabled={item.status === 'uploading'}
+            >
+              Remove
+            </button>
+          </>
         )}
-        {item.status !== 'completed' && (
-          <button
-            type="button"
-            className="button-secondary"
-            onClick={() => onCancel(item)}
-            disabled={item.status === 'cancelled' || item.status === 'rejected'}
-          >
-            Cancel
-          </button>
-        )}
-        <button
-          type="button"
-          className="button-secondary"
-          onClick={() => onRemove(item)}
-          disabled={item.status === 'uploading'}
-        >
-          Remove
-        </button>
       </div>
     </article>
   )

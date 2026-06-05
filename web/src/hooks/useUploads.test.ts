@@ -2,10 +2,15 @@ import { renderHook, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { useUploads } from './useUploads'
 import * as api from '../api/uploads'
+import * as persistence from '../utils/uploadPersistence'
 import type { UploadSession } from '../api/uploads'
 
 vi.mock('../api/uploads')
 vi.mock('../utils/sleep', () => ({ sleep: vi.fn().mockResolvedValue(undefined) }))
+vi.mock('../utils/uploadPersistence', () => ({
+  loadPersistedUploads: vi.fn().mockReturnValue([]),
+  persistUploads: vi.fn(),
+}))
 
 const MB = 1024 * 1024
 
@@ -52,6 +57,8 @@ async function runSuccessfulUpload(file = makeFile('photo.jpg', 'image/jpeg')) {
 
 beforeEach(() => {
   vi.resetAllMocks()
+  vi.mocked(persistence.loadPersistedUploads).mockReturnValue([])
+  vi.mocked(persistence.persistUploads).mockReturnValue(undefined)
 })
 
 // ─── queueFiles ──────────────────────────────────────────────────────────────
@@ -512,5 +519,140 @@ describe('concurrency control', () => {
       gates[2]?.()
       await Promise.all(startPromises)
     })
+  })
+})
+
+// ─── persistence ─────────────────────────────────────────────────────────────
+
+describe('persistence', () => {
+  it('initializes uploads from loadPersistedUploads', () => {
+    const restoredItem = {
+      id: 'restored-1',
+      file: new File([], 'photo.jpg', { type: 'image/jpeg' }),
+      status: 'paused' as const,
+      progress: 50,
+      uploadedChunks: 1,
+      totalChunks: 2,
+      session: makeSession({ uploadedChunks: [0], uploadedChunkCount: 1, progress: 50 }),
+      needsFile: true,
+    }
+    vi.mocked(persistence.loadPersistedUploads).mockReturnValue([restoredItem])
+
+    const { result } = renderHook(() => useUploads())
+
+    expect(result.current.uploads).toHaveLength(1)
+    expect(result.current.uploads[0].needsFile).toBe(true)
+    expect(result.current.uploads[0].id).toBe('restored-1')
+  })
+
+  it('calls persistUploads after uploads state changes', () => {
+    const { result } = renderHook(() => useUploads())
+
+    act(() => { result.current.queueFiles([makeFile('photo.jpg', 'image/jpeg')]) })
+
+    expect(persistence.persistUploads).toHaveBeenCalled()
+    const lastCall = vi.mocked(persistence.persistUploads).mock.calls.at(-1)!
+    expect(lastCall[0]).toHaveLength(1)
+  })
+})
+
+// ─── attachFile ───────────────────────────────────────────────────────────────
+
+describe('attachFile', () => {
+  it('clears needsFile and sets the real file on the item', async () => {
+    const restoredItem = {
+      id: 'restored-1',
+      file: new File([], 'photo.jpg', { type: 'image/jpeg' }),
+      status: 'paused' as const,
+      progress: 0,
+      uploadedChunks: 0,
+      totalChunks: 1,
+      session: makeSession(),
+      needsFile: true,
+    }
+    vi.mocked(persistence.loadPersistedUploads).mockReturnValue([restoredItem])
+    vi.mocked(api.getUploadStatus).mockResolvedValue(makeSession())
+    vi.mocked(api.uploadChunk).mockResolvedValue(makeSession({ uploadedChunkCount: 1, progress: 100 }))
+    vi.mocked(api.finalizeUpload).mockResolvedValue(makeSession({ status: 'completed' }))
+
+    const { result } = renderHook(() => useUploads())
+    const realFile = makeFile('photo.jpg', 'image/jpeg')
+
+    await act(async () => { await result.current.attachFile(result.current.uploads[0], realFile) })
+
+    expect(result.current.uploads[0].needsFile).toBeFalsy()
+    expect(result.current.uploads[0].file).toBe(realFile)
+  })
+
+  it('calls getUploadStatus (not initiateUpload) when the session is resumable', async () => {
+    const restoredItem = {
+      id: 'restored-1',
+      file: new File([], 'photo.jpg', { type: 'image/jpeg' }),
+      status: 'paused' as const,
+      progress: 0,
+      uploadedChunks: 0,
+      totalChunks: 1,
+      session: makeSession({ status: 'uploading' }),
+      needsFile: true,
+    }
+    vi.mocked(persistence.loadPersistedUploads).mockReturnValue([restoredItem])
+    vi.mocked(api.getUploadStatus).mockResolvedValue(makeSession())
+    vi.mocked(api.uploadChunk).mockResolvedValue(makeSession({ uploadedChunkCount: 1, progress: 100 }))
+    vi.mocked(api.finalizeUpload).mockResolvedValue(makeSession({ status: 'completed' }))
+
+    const { result } = renderHook(() => useUploads())
+
+    await act(async () => { await result.current.attachFile(result.current.uploads[0], makeFile('photo.jpg', 'image/jpeg')) })
+
+    expect(api.getUploadStatus).toHaveBeenCalledWith('upload-1')
+    expect(api.initiateUpload).not.toHaveBeenCalled()
+  })
+
+  it('starts a fresh upload if the persisted session was failed', async () => {
+    const restoredItem = {
+      id: 'restored-1',
+      file: new File([], 'photo.jpg', { type: 'image/jpeg' }),
+      status: 'paused' as const,
+      progress: 0,
+      uploadedChunks: 0,
+      totalChunks: 1,
+      session: makeSession({ status: 'failed' }),
+      needsFile: true,
+    }
+    vi.mocked(persistence.loadPersistedUploads).mockReturnValue([restoredItem])
+    vi.mocked(api.initiateUpload).mockResolvedValue(makeSession())
+    vi.mocked(api.uploadChunk).mockResolvedValue(makeSession({ uploadedChunkCount: 1, progress: 100 }))
+    vi.mocked(api.finalizeUpload).mockResolvedValue(makeSession({ status: 'completed' }))
+
+    const { result } = renderHook(() => useUploads())
+
+    await act(async () => { await result.current.attachFile(result.current.uploads[0], makeFile('photo.jpg', 'image/jpeg')) })
+
+    expect(api.initiateUpload).toHaveBeenCalledOnce()
+    expect(api.getUploadStatus).not.toHaveBeenCalled()
+  })
+})
+
+// ─── startUpload — needsFile guard ───────────────────────────────────────────
+
+describe('startUpload — needsFile guard', () => {
+  it('does nothing when the item has needsFile set', async () => {
+    const restoredItem = {
+      id: 'restored-1',
+      file: new File([], 'photo.jpg', { type: 'image/jpeg' }),
+      status: 'paused' as const,
+      progress: 0,
+      uploadedChunks: 0,
+      totalChunks: 1,
+      session: makeSession(),
+      needsFile: true,
+    }
+    vi.mocked(persistence.loadPersistedUploads).mockReturnValue([restoredItem])
+    const { result } = renderHook(() => useUploads())
+
+    await act(async () => { await result.current.startUpload(result.current.uploads[0]) })
+
+    expect(api.initiateUpload).not.toHaveBeenCalled()
+    expect(api.getUploadStatus).not.toHaveBeenCalled()
   })
 })

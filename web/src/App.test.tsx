@@ -51,6 +51,7 @@ vi.mock('./components/UploadList', () => ({
     onCancel: (item: UploadItem) => void
     onPause: (item: UploadItem) => void
     onRemove: (item: UploadItem) => void
+    onAttachFile: (item: UploadItem, file: File) => void
   }) => (
     <div data-testid="upload-list">
       <span data-testid="upload-count">{uploads.length}</span>
@@ -97,6 +98,7 @@ function mockUploads(items: UploadItem[] = []) {
   const cancelItem = vi.fn().mockResolvedValue(undefined)
   const pauseItem = vi.fn()
   const removeItem = vi.fn().mockResolvedValue(undefined)
+  const attachFile = vi.fn()
 
   vi.mocked(useUploads).mockReturnValue({
     uploads: items,
@@ -105,9 +107,10 @@ function mockUploads(items: UploadItem[] = []) {
     cancelItem,
     pauseItem,
     removeItem,
+    attachFile,
   })
 
-  return { queueFiles, startUpload, cancelItem, pauseItem, removeItem }
+  return { queueFiles, startUpload, cancelItem, pauseItem, removeItem, attachFile }
 }
 
 beforeEach(() => {

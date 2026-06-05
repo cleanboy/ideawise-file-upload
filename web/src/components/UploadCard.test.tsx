@@ -4,11 +4,31 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { UploadCard } from './UploadCard'
 import { usePreview } from '../hooks/usePreview'
 import type { UploadItem } from '../types/uploads'
+import type { UploadSession } from '../api/uploads'
 import type { PreviewMeta } from '../hooks/usePreview'
 
 vi.mock('../hooks/usePreview', () => ({
   usePreview: vi.fn().mockReturnValue(null),
 }))
+
+function makeSession(overrides?: Partial<UploadSession>): UploadSession {
+  return {
+    uploadId: 'session-1',
+    filename: 'photo.jpg',
+    mimeType: 'image/jpeg',
+    fileSize: 512000,
+    chunkSize: 1024 * 1024,
+    totalChunks: 3,
+    uploadedChunks: [0],
+    uploadedChunkCount: 1,
+    progress: 33.3,
+    status: 'uploading',
+    createdAt: '2026-06-05T00:00:00Z',
+    updatedAt: '2026-06-05T00:00:00Z',
+    completedAt: null,
+    ...overrides,
+  }
+}
 
 function makeItem(overrides?: Partial<UploadItem>): UploadItem {
   return {
@@ -25,6 +45,7 @@ function makeItem(overrides?: Partial<UploadItem>): UploadItem {
 function makeProps(overrides?: Partial<Parameters<typeof UploadCard>[0]>) {
   return {
     selected: false,
+    onAttachFile: vi.fn(),
     onCancel: vi.fn(),
     onPause: vi.fn(),
     onRemove: vi.fn(),
@@ -256,5 +277,68 @@ describe('UploadCard — callbacks', () => {
     render(<UploadCard item={makeItem()} {...makeProps({ onToggleSelect })} />)
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select photo.jpg' }))
     expect(onToggleSelect).toHaveBeenCalledWith('item-1')
+  })
+})
+
+// ─── needsFile (restored upload) ─────────────────────────────────────────────
+
+describe('UploadCard — needsFile', () => {
+  function makeRestoredItem(): UploadItem {
+    return makeItem({ status: 'paused', needsFile: true, session: makeSession() })
+  }
+
+  it('shows "Select file to resume" button when needsFile is true', () => {
+    render(<UploadCard item={makeRestoredItem()} {...makeProps()} />)
+    expect(screen.getByRole('button', { name: 'Select file to resume' })).toBeInTheDocument()
+  })
+
+  it('hides Start, Pause, Resume, and Cancel buttons when needsFile is true', () => {
+    render(<UploadCard item={makeRestoredItem()} {...makeProps()} />)
+    expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Pause' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Resume' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument()
+  })
+
+  it('shows the Remove button when needsFile is true', () => {
+    render(<UploadCard item={makeRestoredItem()} {...makeProps()} />)
+    expect(screen.getByRole('button', { name: 'Remove' })).toBeEnabled()
+  })
+
+  it('shows a resume hint message when needsFile is true', () => {
+    render(<UploadCard item={makeRestoredItem()} {...makeProps()} />)
+    expect(screen.getByText(/select the original file to resume/i)).toBeInTheDocument()
+  })
+
+  it('calls onAttachFile with the item and selected file when a file is chosen', async () => {
+    const onAttachFile = vi.fn()
+    const item = makeRestoredItem()
+    const { container } = render(<UploadCard item={item} {...makeProps({ onAttachFile })} />)
+
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement
+    const file = new File(['content'], 'photo.jpg', { type: 'image/jpeg' })
+    await userEvent.upload(input, file)
+
+    expect(onAttachFile).toHaveBeenCalledWith(item, file)
+  })
+
+  it('calls onRemove with the item when Remove is clicked on a needsFile item', async () => {
+    const onRemove = vi.fn()
+    const item = makeRestoredItem()
+    render(<UploadCard item={item} {...makeProps({ onRemove })} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Remove' }))
+    expect(onRemove).toHaveBeenCalledWith(item)
+  })
+
+  it('uses session.fileSize for the size display on restored items', () => {
+    const session = makeSession({ fileSize: 1024 * 512 })
+    const item = makeItem({
+      status: 'paused',
+      needsFile: true,
+      file: new File([], 'photo.jpg', { type: 'image/jpeg' }),
+      session,
+    })
+    render(<UploadCard item={item} {...makeProps()} />)
+    expect(screen.getByText('512 KB')).toBeInTheDocument()
   })
 })

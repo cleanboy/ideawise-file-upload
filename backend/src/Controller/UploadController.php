@@ -4,6 +4,7 @@ namespace App\Controller;
 
 use App\Entity\UploadSession;
 use App\Repository\UploadSessionRepository;
+use App\Service\ChunkCacheService;
 use App\Service\FileTypeValidator;
 use App\Service\UploadStorage;
 use Doctrine\ORM\EntityManagerInterface;
@@ -24,6 +25,7 @@ class UploadController extends AbstractController
         private readonly UploadSessionRepository $uploadSessions,
         private readonly UploadStorage $storage,
         private readonly FileTypeValidator $fileTypeValidator,
+        private readonly ChunkCacheService $chunkCache,
         private readonly LoggerInterface $logger,
     ) {
     }
@@ -103,7 +105,7 @@ class UploadController extends AbstractController
         try {
             $this->storage->storeUploadedChunk($session, $chunkIndex, $chunk);
             $session->markChunkUploaded($chunkIndex);
-            $this->syncStoredChunks($session);
+            $this->chunkCache->addChunk($session->getId(), $chunkIndex);
             $this->entityManager->flush();
         } catch (Throwable $e) {
             $this->logger->error('Chunk storage failed', ['uploadId' => $uploadId, 'chunkIndex' => $chunkIndex, 'error' => $e->getMessage()]);
@@ -135,7 +137,7 @@ class UploadController extends AbstractController
             return $this->json($this->serializeSession($session));
         }
 
-        $this->syncStoredChunks($session);
+        $this->syncChunks($session);
         $this->entityManager->flush();
 
         if (!$session->hasAllChunks()) {
@@ -173,6 +175,7 @@ class UploadController extends AbstractController
         }
 
         $session->complete($finalPath, $checksum);
+        $this->chunkCache->deleteSession($session->getId());
         $this->storage->removeUpload($session->getId());
         $this->entityManager->flush();
 
@@ -191,7 +194,7 @@ class UploadController extends AbstractController
         }
 
         if ($session->canAcceptChunks()) {
-            $this->syncStoredChunks($session);
+            $this->syncChunks($session);
             $this->entityManager->flush();
         }
 
@@ -208,6 +211,7 @@ class UploadController extends AbstractController
         }
 
         $session->cancel();
+        $this->chunkCache->deleteSession($session->getId());
         $this->storage->removeUpload($session->getId());
         $this->entityManager->flush();
 
@@ -229,6 +233,7 @@ class UploadController extends AbstractController
             return $this->error('invalid_state', 'Completed uploads cannot be removed with this cleanup action.', 409);
         }
 
+        $this->chunkCache->deleteSession($session->getId());
         $this->storage->removeUpload($session->getId());
         $this->entityManager->remove($session);
         $this->entityManager->flush();
@@ -296,12 +301,16 @@ class UploadController extends AbstractController
         ], $status);
     }
 
-    private function syncStoredChunks(UploadSession $session): void
+    private function syncChunks(UploadSession $session): void
     {
-        $storedChunks = $this->storage->getStoredChunkIndexes($session->getId());
+        $chunks = $this->chunkCache->getUploadedChunks($session->getId());
 
-        if ($storedChunks !== $session->getUploadedChunks()) {
-            $session->replaceUploadedChunks($storedChunks);
+        if ($chunks === null) {
+            $chunks = $this->storage->getStoredChunkIndexes($session->getId());
+        }
+
+        if ($chunks !== $session->getUploadedChunks()) {
+            $session->replaceUploadedChunks($chunks);
         }
     }
 
