@@ -23,6 +23,7 @@ export function useSelection(uploads: UploadItem[]) {
   }
 
   const startableSelected = uploads.some((u) => selectedIds.has(u.id) && STARTABLE.has(u.status))
+  const pausableSelected = uploads.some((u) => selectedIds.has(u.id) && u.status === 'uploading')
 
-  return { selectedIds, toggleSelect, toggleSelectAll, startableSelected }
+  return { selectedIds, toggleSelect, toggleSelectAll, startableSelected, pausableSelected }
 }

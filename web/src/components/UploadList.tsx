@@ -7,6 +7,7 @@ type UploadListProps = {
   uploads: UploadItem[]
   selectedIds: Set<string>
   startableSelected: boolean
+  pausableSelected: boolean
   onAttachFile: (item: UploadItem, file: File) => void
   onCancel: (item: UploadItem) => void
   onPause: (item: UploadItem) => void
@@ -15,12 +16,14 @@ type UploadListProps = {
   onToggleSelect: (id: string) => void
   onToggleSelectAll: () => void
   onStartSelected: () => void
+  onPauseSelected: () => void
 }
 
 export function UploadList({
   uploads,
   selectedIds,
   startableSelected,
+  pausableSelected,
   onAttachFile,
   onCancel,
   onPause,
@@ -29,6 +32,7 @@ export function UploadList({
   onToggleSelect,
   onToggleSelectAll,
   onStartSelected,
+  onPauseSelected,
 }: UploadListProps) {
   const selectAllRef = useRef<HTMLInputElement>(null)
   const allSelected = uploads.length > 0 && selectedIds.size === uploads.length
@@ -63,9 +67,15 @@ export function UploadList({
               <span>{allSelected ? 'Deselect all' : 'Select all'}</span>
             </label>
 
-            <button type="button" onClick={onStartSelected} disabled={!startableSelected}>
-              Start Selected
-            </button>
+            {pausableSelected ? (
+              <button type="button" onClick={onPauseSelected}>
+                Pause Selected
+              </button>
+            ) : (
+              <button type="button" onClick={onStartSelected} disabled={!startableSelected}>
+                Start Selected
+              </button>
+            )}
           </div>
 
           {showOverall && (

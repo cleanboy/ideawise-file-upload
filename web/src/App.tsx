@@ -15,7 +15,7 @@ import { STARTABLE } from './utils/uploadStatus'
 function App() {
   const { attachFile, cancelItem, pauseItem, queueFiles, removeItem, startUpload, uploads } = useUploads()
   const { history, addEntry, clear: clearHistory } = useUploadHistory()
-  const { selectedIds, toggleSelect, toggleSelectAll, startableSelected } = useSelection(uploads)
+  const { selectedIds, toggleSelect, toggleSelectAll, startableSelected, pausableSelected } = useSelection(uploads)
   const historyDialogRef = useRef<HTMLDialogElement>(null)
   const [monitoringOpen, setMonitoringOpen] = useState(false)
   const { metrics, connected, error } = useMonitoring(monitoringOpen)
@@ -38,6 +38,12 @@ function App() {
     uploads
       .filter((u) => selectedIds.has(u.id) && STARTABLE.has(u.status))
       .forEach((u) => void startUpload(u))
+  }
+
+  function pauseSelected() {
+    uploads
+      .filter((u) => selectedIds.has(u.id) && u.status === 'uploading')
+      .forEach((u) => pauseItem(u))
   }
 
   return (
@@ -87,6 +93,7 @@ function App() {
         uploads={uploads}
         selectedIds={selectedIds}
         startableSelected={startableSelected}
+        pausableSelected={pausableSelected}
         onAttachFile={attachFile}
         onCancel={(item) => void cancelItem(item)}
         onPause={(item) => pauseItem(item)}
@@ -95,6 +102,7 @@ function App() {
         onToggleSelect={toggleSelect}
         onToggleSelectAll={toggleSelectAll}
         onStartSelected={startSelected}
+        onPauseSelected={pauseSelected}
       />
     </main>
   )

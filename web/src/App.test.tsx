@@ -33,9 +33,11 @@ vi.mock('./components/UploadList', () => ({
     uploads,
     selectedIds,
     startableSelected,
+    pausableSelected,
     onToggleSelect,
     onToggleSelectAll,
     onStartSelected,
+    onPauseSelected,
     onStart,
     onCancel,
     onPause,
@@ -44,9 +46,11 @@ vi.mock('./components/UploadList', () => ({
     uploads: UploadItem[]
     selectedIds: Set<string>
     startableSelected: boolean
+    pausableSelected: boolean
     onToggleSelect: (id: string) => void
     onToggleSelectAll: () => void
     onStartSelected: () => void
+    onPauseSelected: () => void
     onStart: (item: UploadItem) => void
     onCancel: (item: UploadItem) => void
     onPause: (item: UploadItem) => void
@@ -57,10 +61,12 @@ vi.mock('./components/UploadList', () => ({
       <span data-testid="upload-count">{uploads.length}</span>
       <span data-testid="selected-count">{selectedIds.size}</span>
       <span data-testid="startable">{String(startableSelected)}</span>
+      <span data-testid="pausable">{String(pausableSelected)}</span>
       <button onClick={onToggleSelectAll}>Toggle All</button>
       <button onClick={onStartSelected} disabled={!startableSelected}>
         Start Selected
       </button>
+      <button onClick={onPauseSelected}>Pause Selected</button>
       {uploads.map((u) => (
         <div key={u.id}>
           <button onClick={() => onToggleSelect(u.id)}>Select {u.id}</button>
@@ -238,6 +244,38 @@ describe('App', () => {
       render(<App />)
       await userEvent.click(screen.getByRole('button', { name: 'Select a' }))
       expect(screen.getByTestId('startable').textContent).toBe('false')
+    })
+  })
+
+  describe('pauseSelected', () => {
+    it('pauses all selected uploading items', async () => {
+      const uploading = makeItem('u', 'uploading')
+      const queued = makeItem('q', 'queued')
+      const { pauseItem } = mockUploads([uploading, queued])
+      render(<App />)
+
+      await userEvent.click(screen.getByRole('button', { name: 'Select u' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Select q' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Pause Selected' }))
+
+      expect(pauseItem).toHaveBeenCalledTimes(1)
+      expect(pauseItem).toHaveBeenCalledWith(uploading)
+    })
+  })
+
+  describe('pausableSelected', () => {
+    it('is true when at least one selected item is uploading', async () => {
+      mockUploads([makeItem('a', 'uploading')])
+      render(<App />)
+      await userEvent.click(screen.getByRole('button', { name: 'Select a' }))
+      expect(screen.getByTestId('pausable').textContent).toBe('true')
+    })
+
+    it('is false when no selected items are uploading', async () => {
+      mockUploads([makeItem('a', 'queued')])
+      render(<App />)
+      await userEvent.click(screen.getByRole('button', { name: 'Select a' }))
+      expect(screen.getByTestId('pausable').textContent).toBe('false')
     })
   })
 
